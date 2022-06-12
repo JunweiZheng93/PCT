@@ -1,0 +1,51 @@
+defaults:
+  - _self_
+  - datasets: shapenet.yaml
+  - override hydra/hydra_logging: disabled   # disable hydra logging
+  - override hydra/job_logging: disabled   # disable job logging
+
+hydra:
+  output_subdir: null  # disable creating .hydra directory
+  run:
+    dir: .  # disable output directory created by hydra
+  job:
+    chdir: false  # disable changing working directory
+
+usr_config: null  # e.g. project_root/configs/user_configs/user_config1.yaml
+
+train:
+  device: gpu
+  which_gpu: [0, 1]  # only valid when device is gpu
+  batch_size: 64
+  shuffle: true
+  num_workers: 6  # workers to load data
+  drop_last: false  # whether to drop the last batch when the last batch is less than batch size
+  prefetch: 64  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
+
+default_layer:  # default layer when attention is not applied
+  embedding:
+    K: 32
+    emb_cov1_channel1: 3
+    emb_cov1_channel2: 64
+    emb_cov2_channel1: 64
+    emb_cov2_channel2: 64
+    local_op1_channel1: 128
+    local_op1_channel2: 128
+    local_op2_channel1: 256
+    local_op2_channel2: 128
+  convolution:
+    channels: 128
+
+attention:
+  point2point:
+    enable: true
+    qkv_channels: 128
+  point2neighbor:
+    enable: true
+    K: 32
+    emb_cov2_channel2: 128
+    qkv_channels: 128
+  point2neighbor_multi_scale:
+    enable: true
+  point2patch:
+    enable: true
