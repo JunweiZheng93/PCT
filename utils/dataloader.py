@@ -24,8 +24,8 @@ def unpack_dataset(file, unpacked_path):
     return str(Path(unpacked_path, os.path.splitext(os.path.basename(file))[0]).resolve())
 
 
-def get_shapenet_dataloader(url, saved_path, unpacked_path, mapping, selected_points=2500, seed=0, batch_size=64,
-                            shuffle=True, num_workers=1, drop_last=False, prefetch=64):
+def get_shapenet_dataloader(url, saved_path, unpacked_path, mapping, selected_points=1024, seed=0, batch_size=32,
+                            shuffle=True, num_workers=1, prefetch=64, pin_memory=True):
     # check if dataset already exists
     path = Path(unpacked_path, 'shapenetcore_partanno_segmentation_benchmark_v0')
     if not path.exists():
@@ -46,11 +46,11 @@ def get_shapenet_dataloader(url, saved_path, unpacked_path, mapping, selected_po
 
     # get dataloader
     train_loader = torch.utils.data.DataLoader(train_set, batch_size, shuffle, num_workers=num_workers,
-                                               drop_last=drop_last, prefetch_factor=prefetch)
+                                               drop_last=True, prefetch_factor=prefetch, pin_memory=pin_memory)
     validation_loader = torch.utils.data.DataLoader(validation_set, batch_size, shuffle, num_workers=num_workers,
-                                                    drop_last=drop_last, prefetch_factor=prefetch)
+                                                    drop_last=True, prefetch_factor=prefetch, pin_memory=pin_memory)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size, shuffle, num_workers=num_workers,
-                                              drop_last=drop_last, prefetch_factor=prefetch)
+                                              drop_last=True, prefetch_factor=prefetch, pin_memory=pin_memory)
     return train_loader, validation_loader, test_loader
 
 
@@ -80,7 +80,7 @@ class ShapeNet(torch.utils.data.Dataset):
 
         # get category one hot
         category_id = self.mapping[category_hash]['category_id']
-        category_id = F.one_hot(torch.Tensor([category_id]).long(), 16).to(torch.float32)
+        category_id = F.one_hot(torch.Tensor([category_id]).long(), 16).to(torch.float32).permute(1, 0)
 
         # get point cloud seg label
         parts_id = self.mapping[category_hash]['parts_id']
@@ -88,18 +88,21 @@ class ShapeNet(torch.utils.data.Dataset):
         seg_label = np.loadtxt(seg_label_path).astype('float32')
         # get a fixed number of points from every point cloud
         np.random.seed(self.seed)
-        choice = np.random.choice(len(seg_label), self.selected_points, replace=True)  # TODO: check min points of pcd in ShapeNet, replace=False?
+        if self.selected_points <= len(seg_label):
+            choice = np.random.choice(len(seg_label), self.selected_points, replace=False)
+        else:
+            choice = np.random.choice(len(seg_label), self.selected_points, replace=True)
         seg_label = seg_label[choice]
         # match parts id and convert seg label to one hot
         diff = max(parts_id) - np.max(seg_label)
         seg_label = seg_label + diff
-        seg_label = F.one_hot(torch.Tensor(seg_label).long(), 50).to(torch.float32)
+        seg_label = F.one_hot(torch.Tensor(seg_label).long(), 50).to(torch.float32).permute(1, 0)
 
         # get point cloud
         pcd_path = os.path.join(self.root, category_hash, 'points', f'{pcd_hash}.pts')
-        pcd = torch.Tensor(np.loadtxt(pcd_path)[choice]).to(torch.float32)
+        pcd = torch.Tensor(np.loadtxt(pcd_path)[choice]).to(torch.float32).permute(1, 0)
 
-        # pcd.shape == (N, 3)    seg_label.shape == (N, 50)    category_id.shape == (16, )
+        # pcd.shape == (3, N)    seg_label.shape == (50, N)    category_id.shape == (16, 1)
         return pcd, seg_label, category_id
 
 

@@ -14,38 +14,60 @@ hydra:
 usr_config: null  # e.g. project_root/configs/user_configs/user_config1.yaml
 
 train:
-  device: gpu
+  epochs: 100
+  lr: 1e-3
+  optimizer: adam  # aam or sgd
   which_gpu: [0, 1]  # only valid when device is gpu
-  batch_size: 64
-  shuffle: true
-  num_workers: 6  # workers to load data
-  drop_last: false  # whether to drop the last batch when the last batch is less than batch size
-  prefetch: 64  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
+  pin_memory: true  # pin memory in RAM
+  validation_freq: 10  # frequency in epoch(s) to validate the model
+  dataloader:
+    batch_size: 16
+    shuffle: true
+    num_workers: 16  # the number of subprocess to load data
+    prefetch: 16  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
 
-default_layer:  # default layer when attention is not applied
-  embedding:
-    K: 32
-    emb_cov1_channel1: 3
-    emb_cov1_channel2: 64
-    emb_cov2_channel1: 64
-    emb_cov2_channel2: 64
-    local_op1_channel1: 128
-    local_op1_channel2: 128
-    local_op2_channel1: 256
-    local_op2_channel2: 128
-  convolution:
-    channels: 128
+edgeconv_block:
+  K: [32, 32, 32]
+  xyz_or_feature: ['feature', 'feature', 'feature']  # select K neighbors according to xyz or current feature
+  feature_or_diff: ['diff', 'diff', 'diff']  # use the features of K neighbors or use the difference between the given point and its K neighbors as cross attention input
+  conv1_channel_in: [6, 128, 128]
+  conv1_channel_out: [64, 64, 64]
+  conv2_channel_in: [64, 64, 64]
+  conv2_channel_out: [64, 64, 64]
 
-attention:
-  point2point:
-    enable: true
-    qkv_channels: 128
+point2neighbor_block:
+  enable: true  # if false, edgeconv block will be used
+  use_embedding: true
+  embedding_channels_in: 3
+  embedding_channels_out: 64
   point2neighbor:
-    enable: true
-    K: 32
-    emb_cov2_channel2: 128
-    qkv_channels: 128
-  point2neighbor_multi_scale:
-    enable: true
-  point2patch:
-    enable: true
+    K: [32, 32, 32]
+    xyz_or_feature: ['feature', 'feature', 'feature']  # select K neighbors according to xyz or current feature
+    feature_or_diff: ['diff', 'diff', 'diff']  # use the features of K neighbors or use the difference between the given point and its K neighbors as cross attention input
+    qkv_channels: [64, 64, 64]
+    ff_conv1_channels_in: [64, 64, 64]
+    ff_conv1_channels_out: [128, 128, 128]
+    ff_conv2_channels_in: [128, 128, 128]
+    ff_conv2_channels_out: [64, 64, 64]
+
+conv_block:
+  channels_in: [192]
+  channels_out: [1024]
+
+point2point_block:
+  enable: false  # if false, conv block will be used
+  use_embedding: true
+  embedding_channels_in: 192
+  embedding_channels_out: 1024
+  point2point:
+    qkv_channels: [1024]
+    ff_conv1_channels_in: [1024]
+    ff_conv1_channels_out: [512]
+    ff_conv2_channels_in: [512]
+    ff_conv2_channels_out: [1024]
+
+point2neighbor_multi_scale:
+  enable: true
+
+point2patch:
+  enable: true
