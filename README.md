@@ -1,4 +1,6 @@
 # Setup
+Python version: 3.9 \
+To install all dependencies, enter:
 ```bash
 pip install -r requirements.txt
 ```
