@@ -27,12 +27,15 @@ train:
   epochs: 200
   lr: 1e-5
   lr_scheduler:
-    which: stepLR  # expLR or stepLR
+    which: stepLR  # expLR, stepLR or cosLR
     expLR:
       gamma: 0.95
     stepLR:
       gamma: 0.2
       decay_step: 50
+    cosLR:
+      T_max: 200  # maximum epochs
+      eta_min: 1e-3  # minimum lr
   optimizer: adam  # adam or sgd
   which_gpu: [0]  # if you want to use multiple gpus, enter [0, 1, 2] for gpu #0, #1, #2
   pin_memory: true  # pin memory in RAM
