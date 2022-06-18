@@ -6,6 +6,8 @@ from pathlib import Path
 import torch
 import pkbar
 import warnings
+import wandb
+from utils import metrics
 
 
 @hydra.main(version_base=None, config_path="./configs", config_name="default.yaml")
@@ -21,6 +23,13 @@ def main(config):
     if config.usr_config:
         usr_config = OmegaConf.load(config.usr_config)
         config = OmegaConf.merge(config, usr_config)
+
+    # initialize wandb
+    if config.wandb.enable:
+        config_dict = OmegaConf.to_container(config, resolve=True)
+        del config_dict['wandb'], config_dict['usr_config']
+        wandb.login(key=config.wandb.api_key)
+        wandb.init(project=config.wandb.project, entity=config.wandb.entity, config=config_dict, name=config.wandb.name)
 
     # gpu setting
     device = torch.device(f'cuda:{config.train.which_gpu[0]}' if torch.cuda.is_available() else "cpu")
@@ -46,9 +55,6 @@ def main(config):
     my_model.to(device)
     if torch.cuda.is_available():
         my_model = torch.nn.DataParallel(my_model, device_ids=config.train.which_gpu)
-    for name, param in my_model.named_parameters():
-        if param.requires_grad:
-            print(name, param.data.shape)
 
     # get optimizer
     if config.train.optimizer == 'adam':
@@ -58,31 +64,58 @@ def main(config):
     else:
         raise ValueError(f'only adam or sgd is valid currently, got {config.train.optimizer}')
 
+    # get lr scheduler
+    if config.train.lr_scheduler.which == 'stepLR':
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=config.train.lr_scheduler.stepLR.decay_step, gamma=config.train.lr_scheduler.stepLR.gamma)
+    elif config.train.lr_scheduler.which == 'expLR':
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=config.train.lr_scheduler.expLR.gamma)
+    else:
+        raise ValueError('Not implemented!')
+
     # start training
     for epoch in range(config.train.epochs):
         my_model.train()
         kbar = pkbar.Kbar(target=len(train), epoch=epoch, num_epochs=config.train.epochs, always_stateful=True)
-        loss_list = []
+        train_loss_list = []
+        shape_ious = []
         for i, (samples, seg_labels, cls_label) in enumerate(train):
             samples, seg_labels, cls_label = samples.to(device), seg_labels.to(device), cls_label.to(device)
-            train_loss = torch.sum(my_model(samples, cls_label, seg_labels)) / config.train.dataloader.batch_size
+            preds, train_loss = my_model(samples, cls_label, seg_labels)
+            train_loss = torch.sum(train_loss) / config.train.dataloader.batch_size
             optimizer.zero_grad()
             train_loss.backward()
             optimizer.step()
-            loss_list.append(train_loss.detach())
-            acc_loss = sum(loss_list) / len(loss_list)
-            kbar.update(i+1, values=[("loss", acc_loss)])
+            train_loss_list.append(train_loss.detach())
+            shape_ious.extend(metrics.calculate_shape_IoU(preds, seg_labels, cls_label, config.datasets.mapping))
+            kbar.update(i)
+        current_lr = optimizer.param_groups[0]['lr']
+        scheduler.step()
+        train_loss = sum(train_loss_list) / len(train_loss_list)
+        train_miou = sum(shape_ious) / len(shape_ious)
+        if config.wandb.enable and (epoch+1) % config.train.validation_freq:
+            wandb.log({'train': {'loss': train_loss, 'mIoU': train_miou}}, commit=True)
+        elif config.wandb.enable and not (epoch+1) % config.train.validation_freq:
+            wandb.log({'train': {'loss': train_loss, 'mIoU': train_miou}}, commit=False)
 
         # start validation
         if not (epoch+1) % config.train.validation_freq:
             my_model.eval()
             val_loss_list = []
-            for i, (samples, seg_labels, cls_label) in enumerate(validation):
+            shape_ious = []
+            for samples, seg_labels, cls_label in validation:
                 samples, seg_labels, cls_label = samples.to(device), seg_labels.to(device), cls_label.to(device)
-                val_loss = torch.sum(my_model(samples, cls_label, seg_labels)) / config.train.dataloader.batch_size
+                preds, val_loss = my_model(samples, cls_label, seg_labels)
+                val_loss = torch.sum(val_loss) / config.train.dataloader.batch_size
                 val_loss_list.append(val_loss.detach())
-                val_acc_loss = sum(val_loss_list) / len(val_loss_list)
-            kbar.add(0, values=[("val_loss", val_acc_loss)])
+                shape_ious.extend(metrics.calculate_shape_IoU(preds, seg_labels, cls_label, config.datasets.mapping))
+            val_loss = sum(val_loss_list) / len(val_loss_list)
+            val_miou = sum(shape_ious) / len(shape_ious)
+            kbar.update(i+1, values=[('lr', current_lr), ('train_loss', train_loss), ('train_mIoU', train_miou), ('val_loss', val_loss), ('val_mIoU', val_miou)])
+            if config.wandb.enable:
+                wandb.log({'validation': {'loss': val_loss, 'mIoU': val_miou}}, commit=True)
+        else:
+            kbar.update(i+1, values=[('lr', current_lr), ('train_loss', train_loss), ('train_mIoU', train_miou)])
+    wandb.finish(quiet=True)
 
 
 if __name__ == '__main__':

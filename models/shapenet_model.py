@@ -299,4 +299,4 @@ class ShapeNetModel(nn.Module):
         x = self.conv5(x)
         # x.shape == (B, 50, N)
         loss = self.loss_fn(x, seg_label)
-        return loss
+        return x, loss

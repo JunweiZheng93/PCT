@@ -1,9 +1,3 @@
-defaults:
-  - _self_
-  - datasets: shapenet.yaml
-  - override hydra/hydra_logging: disabled   # disable hydra logging
-  - override hydra/job_logging: disabled   # disable job logging
-
 hydra:
   output_subdir: null  # disable creating .hydra directory
   run:
@@ -13,18 +7,41 @@ hydra:
 
 usr_config: null  # e.g. project_root/configs/user_configs/user_config1.yaml
 
+################### Don't modify parameters above #######################
+
+################### You can modify all parameters below #################
+defaults:
+  - _self_  # import default.yaml itself
+  - datasets: shapenet.yaml  # import shapenet.yaml
+  - override hydra/hydra_logging: disabled   # disable hydra logging because we will use wandb as our logger
+  - override hydra/job_logging: disabled   # disable job logging because we will use wandb as our logger
+
+wandb:
+  enable: true
+  api_key: null  # your wandb api key
+  project: null  # the name of your project
+  entity: null  # the place to save your runs. can be your wandb username or team name
+  name: ${now:%Y%m%d%H%M%S}  # the name your run
+
 train:
-  epochs: 100
-  lr: 1e-3
-  optimizer: adam  # aam or sgd
-  which_gpu: [0, 1]  # only valid when device is gpu
+  epochs: 200
+  lr: 1e-5
+  lr_scheduler:
+    which: stepLR  # expLR or stepLR
+    expLR:
+      gamma: 0.95
+    stepLR:
+      gamma: 0.2
+      decay_step: 50
+  optimizer: adam  # adam or sgd
+  which_gpu: [0]  # if you want to use multiple gpus, enter [0, 1, 2] for gpu #0, #1, #2
   pin_memory: true  # pin memory in RAM
   validation_freq: 10  # frequency in epoch(s) to validate the model
   dataloader:
-    batch_size: 16
+    batch_size: 8
     shuffle: true
     num_workers: 16  # the number of subprocess to load data
-    prefetch: 16  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
+    prefetch: 32  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
 
 edgeconv_block:
   K: [32, 32, 32]
@@ -41,7 +58,7 @@ point2neighbor_block:
   embedding_channels_in: 3
   embedding_channels_out: 64
   point2neighbor:
-    K: [32, 32, 32]
+    K: [32, 32, 32]  # 3 values in the list means point2neighbor_block includes 3 point2neighbor layers. The 'K' for each layer is 32, 32 and 32 respectively
     xyz_or_feature: ['feature', 'feature', 'feature']  # select K neighbors according to xyz or current feature
     feature_or_diff: ['diff', 'diff', 'diff']  # use the features of K neighbors or use the difference between the given point and its K neighbors as cross attention input
     qkv_channels: [64, 64, 64]

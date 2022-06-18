@@ -30,3 +30,5 @@ ipython_config.py
 
 datasets/
 results/
+configs/usr/
+wandb/
