@@ -1,9 +1,7 @@
-# PCT Project
-
-## How to run
+# How to run
 `python train.py usr_config=YOUR/USR/CONFIG/PATH`
 
-## About configuration files
+# About configuration files
 The train/test script will read the default configuration file (`./configs/default.yaml`) and the user specified 
 configuration file before training/testing. It is not recommended to modify the default file directly. It is encouraged 
 to create a new yaml file and specify the file via `usr_config` argument. For example, in your usr config file, enter:
@@ -22,7 +20,7 @@ python train.py usr_config=YOUR/USR/CONFIG/PATH
 ```
 Check the default configuration file for legal hyper-parameters.
 
-## WandB (Weights and biases)
+# WandB (Weights and biases)
 We use wandb to log all experiment results. It is an amazing logger for deep learning. If you want to disable the wandb 
 logger, do it in your usr config:
 ```yaml
