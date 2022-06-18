@@ -14,7 +14,8 @@ configuration file before training/testing. It is not recommended to modify the 
 to create a new yaml file and specify the file via `usr_config` argument. For example, in your usr config file, enter:
 ```yaml
 train:
-  batch_size: 32
+  dataloader:
+    batch_size: 32
   lr_scheduler:
     which: stepLR
     stepLR:

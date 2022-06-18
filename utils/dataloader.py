@@ -11,6 +11,8 @@ import numpy as np
 
 def download_dataset(url, saved_path):
     ssl._create_default_https_context = ssl._create_unverified_context
+    if not os.path.exists(saved_path):
+        os.makedirs(saved_path)
     print('Downloading dataset, please wait...')
     wget.download(url=url, out=saved_path)
     print()
