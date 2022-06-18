@@ -1,0 +1,6 @@
+hydra-core==1.2.0
+numpy==1.22.4
+omegaconf==2.2.2
+pkbar==0.5
+torch==1.11.0
+wget==3.2

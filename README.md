@@ -1,3 +1,8 @@
+# Setup
+```bash
+pip install -r requirements.txt
+```
+
 # How to run
 `python train.py usr_config=YOUR/USR/CONFIG/PATH`
 
