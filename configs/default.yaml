@@ -21,7 +21,7 @@ wandb:
   api_key: null  # your wandb api key
   project: null  # the name of your project
   entity: null  # the place to save your runs. can be your wandb username or team name
-  name: ${now:%Y%m%d%H%M%S}  # the name your run
+  name: ${now:%Y%m%d_%H%M%S}  # the name your run
 
 train:
   epochs: 200
