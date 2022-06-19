@@ -27,6 +27,7 @@ train:
   epochs: 200
   lr: 1e-5
   lr_scheduler:
+    enable: true
     which: stepLR  # expLR, stepLR or cosLR
     expLR:
       gamma: 0.95

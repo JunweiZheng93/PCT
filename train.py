@@ -65,14 +65,15 @@ def main(config):
         raise ValueError(f'only adam or sgd is valid currently, got {config.train.optimizer}')
 
     # get lr scheduler
-    if config.train.lr_scheduler.which == 'stepLR':
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=config.train.lr_scheduler.stepLR.decay_step, gamma=config.train.lr_scheduler.stepLR.gamma)
-    elif config.train.lr_scheduler.which == 'expLR':
-        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=config.train.lr_scheduler.expLR.gamma)
-    elif config.train.lr_scheduler.which == 'cosLR':
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.train.lr_scheduler.cosLR.T_max, eta_min=config.train.lr_scheduler.cosLR.eta_min)
-    else:
-        raise ValueError('Not implemented!')
+    if config.train.lr_scheduler.enable:
+        if config.train.lr_scheduler.which == 'stepLR':
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=config.train.lr_scheduler.stepLR.decay_step, gamma=config.train.lr_scheduler.stepLR.gamma)
+        elif config.train.lr_scheduler.which == 'expLR':
+            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=config.train.lr_scheduler.expLR.gamma)
+        elif config.train.lr_scheduler.which == 'cosLR':
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.train.lr_scheduler.cosLR.T_max, eta_min=config.train.lr_scheduler.cosLR.eta_min)
+        else:
+            raise ValueError('Not implemented!')
 
     # start training
     for epoch in range(config.train.epochs):
@@ -91,13 +92,14 @@ def main(config):
             shape_ious.extend(metrics.calculate_shape_IoU(preds, seg_labels, cls_label, config.datasets.mapping))
             kbar.update(i)
         current_lr = optimizer.param_groups[0]['lr']
-        scheduler.step()
+        if config.train.lr_scheduler.enable:
+            scheduler.step()
         train_loss = sum(train_loss_list) / len(train_loss_list)
         train_miou = sum(shape_ious) / len(shape_ious)
         if config.wandb.enable and (epoch+1) % config.train.validation_freq:
-            wandb.log({'train': {'loss': train_loss, 'mIoU': train_miou}}, commit=True)
+            wandb.log({'train': {'lr': current_lr, 'loss': train_loss, 'mIoU': train_miou}}, commit=True)
         elif config.wandb.enable and not (epoch+1) % config.train.validation_freq:
-            wandb.log({'train': {'loss': train_loss, 'mIoU': train_miou}}, commit=False)
+            wandb.log({'train': {'lr': current_lr, 'loss': train_loss, 'mIoU': train_miou}}, commit=False)
 
         # start validation
         if not (epoch+1) % config.train.validation_freq:
