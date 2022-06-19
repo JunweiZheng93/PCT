@@ -40,7 +40,7 @@ train:
   optimizer: adam  # adam or sgd
   which_gpu: [0]  # if you want to use multiple gpus, enter [0, 1, 2] for gpu #0, #1, #2
   pin_memory: true  # pin memory in RAM
-  validation_freq: 10  # frequency in epoch(s) to validate the model
+  validation_freq: 1  # frequency in epoch(s) to validate the model
   dataloader:
     batch_size: 8
     shuffle: true

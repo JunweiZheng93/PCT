@@ -75,12 +75,13 @@ def main(config):
         else:
             raise ValueError('Not implemented!')
 
-    # start training
     for epoch in range(config.train.epochs):
+        # start training
         my_model.train()
         kbar = pkbar.Kbar(target=len(train), epoch=epoch, num_epochs=config.train.epochs, always_stateful=True)
         train_loss_list = []
         shape_ious = []
+        categories = []
         for i, (samples, seg_labels, cls_label) in enumerate(train):
             samples, seg_labels, cls_label = samples.to(device), seg_labels.to(device), cls_label.to(device)
             preds, train_loss = my_model(samples, cls_label, seg_labels)
@@ -89,34 +90,47 @@ def main(config):
             train_loss.backward()
             optimizer.step()
             train_loss_list.append(train_loss.detach())
-            shape_ious.extend(metrics.calculate_shape_IoU(preds, seg_labels, cls_label, config.datasets.mapping))
+            shape_iou, category = metrics.calculate_shape_IoU(preds, seg_labels, cls_label, config.datasets.mapping)
+            shape_ious.extend(shape_iou)
+            categories.extend(category)
             kbar.update(i)
         current_lr = optimizer.param_groups[0]['lr']
         if config.train.lr_scheduler.enable:
             scheduler.step()
+        # calculate metrics
         train_loss = sum(train_loss_list) / len(train_loss_list)
         train_miou = sum(shape_ious) / len(shape_ious)
+        train_category_iou = metrics.calculate_category_IoU(shape_ious, categories, config.datasets.mapping)
+        metric_dict = {'train': {'lr': current_lr, 'loss': train_loss, 'mIoU': train_miou}}
+        metric_dict['train'].update(train_category_iou)
         if config.wandb.enable and (epoch+1) % config.train.validation_freq:
-            wandb.log({'train': {'lr': current_lr, 'loss': train_loss, 'mIoU': train_miou}}, commit=True)
+            wandb.log(metric_dict, commit=True)
         elif config.wandb.enable and not (epoch+1) % config.train.validation_freq:
-            wandb.log({'train': {'lr': current_lr, 'loss': train_loss, 'mIoU': train_miou}}, commit=False)
+            wandb.log(metric_dict, commit=False)
 
         # start validation
         if not (epoch+1) % config.train.validation_freq:
             my_model.eval()
             val_loss_list = []
             shape_ious = []
+            categories = []
             for samples, seg_labels, cls_label in validation:
                 samples, seg_labels, cls_label = samples.to(device), seg_labels.to(device), cls_label.to(device)
                 preds, val_loss = my_model(samples, cls_label, seg_labels)
                 val_loss = torch.sum(val_loss) / config.train.dataloader.batch_size
                 val_loss_list.append(val_loss.detach())
-                shape_ious.extend(metrics.calculate_shape_IoU(preds, seg_labels, cls_label, config.datasets.mapping))
+                shape_iou, category = metrics.calculate_shape_IoU(preds, seg_labels, cls_label, config.datasets.mapping)
+                shape_ious.extend(shape_iou)
+                categories.extend(category)
+            # calculate metrics
             val_loss = sum(val_loss_list) / len(val_loss_list)
             val_miou = sum(shape_ious) / len(shape_ious)
+            val_category_iou = metrics.calculate_category_IoU(shape_ious, categories, config.datasets.mapping)
+            metric_dict = {'validation': {'loss': val_loss, 'mIoU': val_miou}}
+            metric_dict['validation'].update(val_category_iou)
             kbar.update(i+1, values=[('lr', current_lr), ('train_loss', train_loss), ('train_mIoU', train_miou), ('val_loss', val_loss), ('val_mIoU', val_miou)])
             if config.wandb.enable:
-                wandb.log({'validation': {'loss': val_loss, 'mIoU': val_miou}}, commit=True)
+                wandb.log(metric_dict, commit=True)
         else:
             kbar.update(i+1, values=[('lr', current_lr), ('train_loss', train_loss), ('train_mIoU', train_miou)])
     wandb.finish(quiet=True)
