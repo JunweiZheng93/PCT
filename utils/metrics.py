@@ -6,10 +6,13 @@ def calculate_shape_IoU(pred, seg_label, category_id, mapping):
     pred = torch.max(pred.permute(0, 2, 1), dim=2)[1].detach().cpu().numpy()
     seg_label = torch.max(seg_label.permute(0, 2, 1), dim=2)[1].detach().cpu().numpy()
     category_id = torch.max(category_id[:, :, 0], dim=1)[1].detach().cpu().numpy()
+    category_id_to_hash_code_mapping = {}
+    for hash_code in list(mapping.keys()):
+        category_id_to_hash_code_mapping[str(mapping[hash_code]['category_id'])] = hash_code
     categories = []
     shape_ious = []
     for shape_id in range(category_id.shape[0]):
-        hash_code = mapping[str(category_id[shape_id])]
+        hash_code = category_id_to_hash_code_mapping[str(category_id[shape_id])]
         parts_id = mapping[hash_code]['parts_id']
         categories.append(mapping[hash_code]['category'])
         part_ious = []
@@ -26,13 +29,12 @@ def calculate_shape_IoU(pred, seg_label, category_id, mapping):
 
 
 def calculate_category_IoU(shape_ious, categories, mapping):
-    IoU = {}
+    collections = {}
     category_IoU = {}
     for hash_code in list(mapping.keys()):
-        if len(hash_code) == 8:
-            IoU[mapping[hash_code]['category']] = []
+        collections[mapping[hash_code]['category']] = []
     for category, shape_iou in zip(categories, shape_ious):
-        IoU[category].append(shape_iou)
-    for category in list(IoU.keys()):
-        category_IoU[f'{category}_IoU'] = sum(IoU[category]) / len(IoU[category])
+        collections[category].append(shape_iou)
+    for category in list(collections.keys()):
+        category_IoU[f'{category}_IoU'] = sum(collections[category]) / len(collections[category])
     return category_IoU

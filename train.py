@@ -101,8 +101,8 @@ def main(config):
         train_loss = sum(train_loss_list) / len(train_loss_list)
         train_miou = sum(shape_ious) / len(shape_ious)
         train_category_iou = metrics.calculate_category_IoU(shape_ious, categories, config.datasets.mapping)
-        metric_dict = {'train': {'lr': current_lr, 'loss': train_loss, 'mIoU': train_miou}}
-        metric_dict['train'].update(train_category_iou)
+        metric_dict = {'train': {'shapenet': {'lr': current_lr, 'loss': train_loss, 'mIoU': train_miou}}}
+        metric_dict['train']['shapenet'].update(train_category_iou)
         if config.wandb.enable and (epoch+1) % config.train.validation_freq:
             wandb.log(metric_dict, commit=True)
         elif config.wandb.enable and not (epoch+1) % config.train.validation_freq:
@@ -126,8 +126,8 @@ def main(config):
             val_loss = sum(val_loss_list) / len(val_loss_list)
             val_miou = sum(shape_ious) / len(shape_ious)
             val_category_iou = metrics.calculate_category_IoU(shape_ious, categories, config.datasets.mapping)
-            metric_dict = {'validation': {'loss': val_loss, 'mIoU': val_miou}}
-            metric_dict['validation'].update(val_category_iou)
+            metric_dict = {'validation': {'shapenet': {'loss': val_loss, 'mIoU': val_miou}}}
+            metric_dict['validation']['shapenet'].update(val_category_iou)
             kbar.update(i+1, values=[('lr', current_lr), ('train_loss', train_loss), ('train_mIoU', train_miou), ('val_loss', val_loss), ('val_mIoU', val_miou)])
             if config.wandb.enable:
                 wandb.log(metric_dict, commit=True)

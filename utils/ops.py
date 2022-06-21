@@ -26,22 +26,34 @@ def index_points(points, idx):
     return res.view(*raw_shape, -1)
 
 
+def knn(x, k):
+    x = x.permute(0, 2, 1)
+    inner = -2 * torch.matmul(x.transpose(2, 1), x)
+    xx = torch.sum(x ** 2, dim=1, keepdim=True)
+    pairwise_distance = -xx - inner - xx.transpose(2, 1)
+
+    idx = pairwise_distance.topk(k=k, dim=-1)[1]  # idx.shape == (B, N, K)
+    return idx
+
+
 def group(pcd, xyz, K, xyz_or_feature, feature_or_diff, cross_attention):
     pcd_clone = pcd[..., None]  # pcd_clone.shape == (B, C, N, 1)
     pcd = pcd.permute(0, 2, 1)  # pcd.shape == (B, N, C)
     xyz = xyz.permute(0, 2, 1)  # xyz.shape == (B, N, C)
 
-    if xyz_or_feature == 'xyz':
-        dists = square_distance(xyz, xyz)  # dists.shape == (B, N, N)
-    elif xyz_or_feature == 'feature':
-        dists = square_distance(pcd, pcd)  # dists.shape == (B, N, N)
-    else:
-        raise ValueError(f'xyz_or_feature should be "xyz" or "feature", but got {xyz_or_feature}')
+    # if xyz_or_feature == 'xyz':
+    #     dists = square_distance(xyz, xyz)  # dists.shape == (B, N, N)
+    # elif xyz_or_feature == 'feature':
+    #     dists = square_distance(pcd, pcd)  # dists.shape == (B, N, N)
+    # else:
+    #     raise ValueError(f'xyz_or_feature should be "xyz" or "feature", but got {xyz_or_feature}')
 
-    idx = dists.argsort()[:, :, :K]  # idx.shape == (B, N, K)
+    # idx = dists.argsort()[:, :, :K]  # idx.shape == (B, N, K)
+
+    idx = knn(pcd, K)  # idx.shape == (B, N, K)
     neighbors = index_points(pcd, idx)  # neighbors.shape == (B, N, K, C)
 
-    if feature_or_diff == 'xyz':
+    if feature_or_diff == 'feature':
         pcd = torch.cat([neighbors, pcd[:, :, None, :].repeat(1, 1, K, 1)], dim=-1).permute(0, 3, 1, 2)  # pcd.shape == (B, 2C, N, K)
         neighbors = neighbors.permute(0, 3, 1, 2)  # neighbors.shape == (B, C, N, K)
     elif feature_or_diff == 'diff':
