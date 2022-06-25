@@ -32,3 +32,4 @@ datasets/
 results/
 configs/usr/
 wandb/
+artifacts/

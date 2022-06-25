@@ -8,6 +8,9 @@ import pkbar
 import warnings
 import wandb
 from utils import metrics
+import os
+import shutil
+import copy
 
 
 @hydra.main(version_base=None, config_path="./configs", config_name="default.yaml")
@@ -24,20 +27,20 @@ def main(config):
         usr_config = OmegaConf.load(config.usr_config)
         config = OmegaConf.merge(config, usr_config)
 
-    # initialize wandb
     if config.wandb.enable:
-        config_dict = OmegaConf.to_container(config, resolve=True)
-        del config_dict['wandb'], config_dict['usr_config']
+        # initialize wandb
         wandb.login(key=config.wandb.api_key)
-        wandb.init(project=config.wandb.project, entity=config.wandb.entity, config=config_dict, name=config.wandb.name)
+        del config.wandb.api_key
+        config_dict = OmegaConf.to_container(config, resolve=True)
+        run = wandb.init(project=config.wandb.project, entity=config.wandb.entity, config=config_dict, name=config.wandb.name)
 
     # gpu setting
     device = torch.device(f'cuda:{config.train.which_gpu[0]}' if torch.cuda.is_available() else "cpu")
     warnings.filterwarnings("ignore", category=UserWarning)
 
     # get datasets
-    train, validation, test = dataloader.get_shapenet_dataloader(config.datasets.url, config.datasets.saved_path, config.datasets.unpack_path, config.datasets.mapping, config.datasets.selected_points, config.datasets.seed,
-                                                                 config.train.dataloader.batch_size, config.train.dataloader.shuffle, config.train.dataloader.num_workers, config.train.dataloader.prefetch, config.train.pin_memory)
+    train, validation, _ = dataloader.get_shapenet_dataloader(config.datasets.url, config.datasets.saved_path, config.datasets.unpack_path, config.datasets.mapping, config.datasets.selected_points, config.datasets.seed,
+                                                              config.train.dataloader.batch_size, config.train.dataloader.shuffle, config.train.dataloader.num_workers, config.train.dataloader.prefetch, config.train.pin_memory)
 
     # get model
     my_model = shapenet_model.ShapeNetModel(config.point2neighbor_block.enable, config.point2neighbor_block.use_embedding, config.point2neighbor_block.embedding_channels_in,
@@ -62,7 +65,7 @@ def main(config):
     elif config.train.optimizer == 'sgd':
         optimizer = torch.optim.SGD(my_model.parameters(), lr=config.train.lr)
     else:
-        raise ValueError(f'only adam or sgd is valid currently, got {config.train.optimizer}')
+        raise ValueError('Not implemented!')
 
     # get lr scheduler
     if config.train.lr_scheduler.enable:
@@ -97,10 +100,13 @@ def main(config):
         current_lr = optimizer.param_groups[0]['lr']
         if config.train.lr_scheduler.enable:
             scheduler.step()
+
         # calculate metrics
         train_loss = sum(train_loss_list) / len(train_loss_list)
         train_miou = sum(shape_ious) / len(shape_ious)
         train_category_iou = metrics.calculate_category_IoU(shape_ious, categories, config.datasets.mapping)
+
+        # log results
         metric_dict = {'train': {'shapenet': {'lr': current_lr, 'loss': train_loss, 'mIoU': train_miou}}}
         metric_dict['train']['shapenet'].update(train_category_iou)
         if config.wandb.enable and (epoch+1) % config.train.validation_freq:
@@ -122,18 +128,44 @@ def main(config):
                 shape_iou, category = metrics.calculate_shape_IoU(preds, seg_labels, cls_label, config.datasets.mapping)
                 shape_ious.extend(shape_iou)
                 categories.extend(category)
+
             # calculate metrics
             val_loss = sum(val_loss_list) / len(val_loss_list)
             val_miou = sum(shape_ious) / len(shape_ious)
             val_category_iou = metrics.calculate_category_IoU(shape_ious, categories, config.datasets.mapping)
+
+            # log results
             metric_dict = {'validation': {'shapenet': {'loss': val_loss, 'mIoU': val_miou}}}
             metric_dict['validation']['shapenet'].update(val_category_iou)
             kbar.update(i+1, values=[('lr', current_lr), ('train_loss', train_loss), ('train_mIoU', train_miou), ('val_loss', val_loss), ('val_mIoU', val_miou)])
             if config.wandb.enable:
                 wandb.log(metric_dict, commit=True)
+                # save model
+                if epoch >= 1 and val_miou > val_miou_old:
+                    state_dict = my_model.state_dict()
+                    for key in list(state_dict.keys()):
+                        if key.startswith('module'):  # the keys will start with 'module' when using gpu
+                            state_dict[key[7:]] = state_dict.pop(key)
+                    torch.save(state_dict, './wandb/latest-run/files/checkpoint.pt')
+                val_miou_old = copy.deepcopy(val_miou)
         else:
             kbar.update(i+1, values=[('lr', current_lr), ('train_loss', train_loss), ('train_mIoU', train_miou)])
-    wandb.finish(quiet=True)
+
+    # save artifacts to wandb server
+    if config.wandb.enable:
+        artifacts = wandb.Artifact(config.wandb.name, type='runs')
+        # add configuration file
+        OmegaConf.save(config=config, f='./usr_config.yaml', resolve=False)
+        artifacts.add_file('./usr_config.yaml')
+        os.remove('./usr_config.yaml')
+        # add model architecture
+        artifacts.add_file('./models/shapenet_model.py')
+        # add model weights
+        artifacts.add_file('./wandb/latest-run/files/checkpoint.pt')
+        # log artifacts
+        run.log_artifact(artifacts)
+        wandb.finish(quiet=True)
+        shutil.rmtree('./wandb/')
 
 
 if __name__ == '__main__':
