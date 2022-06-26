@@ -51,7 +51,8 @@ def main(config):
 
     # get datasets
     _, _, test = dataloader.get_shapenet_dataloader(config.datasets.url, config.datasets.saved_path, config.datasets.unpack_path, config.datasets.mapping, config.datasets.selected_points, config.datasets.seed,
-                                                    config.test.dataloader.batch_size, config.test.dataloader.shuffle, config.test.dataloader.num_workers, config.test.dataloader.prefetch, config.test.pin_memory)
+                                                    config.test.dataloader.batch_size, config.test.dataloader.shuffle, config.test.dataloader.num_workers, config.test.dataloader.prefetch, config.test.pin_memory,
+                                                    config.test.dataloader.smoothing, config.test.dataloader.epsilon)
 
     # get model
     my_model = shapenet_model.ShapeNetModel(config.point2neighbor_block.enable, config.point2neighbor_block.use_embedding, config.point2neighbor_block.embedding_channels_in,

@@ -25,17 +25,17 @@ wandb:
 
 train:
   epochs: 200
-  lr: 1e-5
+  lr: 1e-3
   lr_scheduler:
     enable: true
     which: stepLR  # expLR, stepLR or cosLR
     expLR:
       gamma: 0.95
     stepLR:
-      gamma: 0.2
+      gamma: 0.2  # lr = gamma * lr, when decay step is hit
       decay_step: 50
     cosLR:
-      T_max: 200  # maximum epochs
+      T_max: ${epochs}  # maximum epochs
       eta_min: 1e-3  # minimum lr
   optimizer: adam  # adam or sgd
   which_gpu: [0]  # if you want to use multiple gpus, enter [0, 1, 2] for gpu #0, #1, #2
@@ -46,6 +46,8 @@ train:
     shuffle: true
     num_workers: 16  # the number of subprocess to load data
     prefetch: 32  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
+    label_smoothing: true
+    epsilon: 0.2
 
 test:
   which_gpu: [0]  # the name of the run you want to test
@@ -55,6 +57,8 @@ test:
     shuffle: false
     num_workers: 16  # the number of subprocess to load data
     prefetch: 32  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
+    label_smoothing: true
+    epsilon: 0.2
 
 edgeconv_block:
   K: [32, 32, 32]

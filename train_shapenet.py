@@ -40,7 +40,8 @@ def main(config):
 
     # get datasets
     train, validation, _ = dataloader.get_shapenet_dataloader(config.datasets.url, config.datasets.saved_path, config.datasets.unpack_path, config.datasets.mapping, config.datasets.selected_points, config.datasets.seed,
-                                                              config.train.dataloader.batch_size, config.train.dataloader.shuffle, config.train.dataloader.num_workers, config.train.dataloader.prefetch, config.train.pin_memory)
+                                                              config.train.dataloader.batch_size, config.train.dataloader.shuffle, config.train.dataloader.num_workers, config.train.dataloader.prefetch, config.train.pin_memory,
+                                                              config.train.dataloader.label_smoothing, config.train.dataloader.epsilon)
 
     # get model
     my_model = shapenet_model.ShapeNetModel(config.point2neighbor_block.enable, config.point2neighbor_block.use_embedding, config.point2neighbor_block.embedding_channels_in,
@@ -61,9 +62,9 @@ def main(config):
 
     # get optimizer
     if config.train.optimizer == 'adam':
-        optimizer = torch.optim.Adam(my_model.parameters(), lr=config.train.lr)
+        optimizer = torch.optim.Adam(my_model.parameters(), lr=config.train.lr, weight_decay=1e-4)
     elif config.train.optimizer == 'sgd':
-        optimizer = torch.optim.SGD(my_model.parameters(), lr=config.train.lr)
+        optimizer = torch.optim.SGD(my_model.parameters(), lr=config.train.lr, weight_decay=1e-4)
     else:
         raise ValueError('Not implemented!')
 
