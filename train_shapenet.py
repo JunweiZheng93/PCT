@@ -40,8 +40,8 @@ def main(config):
     warnings.filterwarnings("ignore", category=UserWarning)
 
     # get datasets
-    train, validation, _ = dataloader.get_shapenet_dataloader(config.datasets.url, config.datasets.saved_path, config.datasets.unpack_path, config.datasets.mapping, config.datasets.selected_points, config.datasets.seed,
-                                                              config.train.dataloader.batch_size, config.train.dataloader.shuffle, config.train.dataloader.num_workers, config.train.dataloader.prefetch, config.train.pin_memory)
+    train, validation, trainval, test = dataloader.get_shapenet_dataloader(config.datasets.url, config.datasets.saved_path, config.datasets.unpack_path, config.datasets.mapping, config.datasets.selected_points,
+                                                                           config.train.dataloader.batch_size, config.train.dataloader.shuffle, config.train.dataloader.num_workers, config.train.dataloader.prefetch, config.train.pin_memory)
 
     # get model
     my_model = shapenet_model.ShapeNetModel(config.point2neighbor_block.enable, config.point2neighbor_block.use_embedding, config.point2neighbor_block.embedding_channels_in,
@@ -88,12 +88,12 @@ def main(config):
     for epoch in range(config.train.epochs):
         # start training
         my_model.train()
-        kbar = pkbar.Kbar(target=len(train), epoch=epoch, num_epochs=config.train.epochs, always_stateful=True)
+        kbar = pkbar.Kbar(target=len(trainval), epoch=epoch, num_epochs=config.train.epochs, always_stateful=True)
         train_loss_list = []
         pred_list = []
         seg_label_list = []
         cls_label_list = []
-        for i, (samples, seg_labels, cls_label) in enumerate(train):
+        for i, (samples, seg_labels, cls_label) in enumerate(trainval):
             samples, seg_labels, cls_label = samples.to(device), seg_labels.to(device), cls_label.to(device)
             preds = my_model(samples, cls_label)
             train_loss = loss_fn(preds, seg_labels)
@@ -134,7 +134,7 @@ def main(config):
             seg_label_list = []
             cls_label_list = []
             with torch.no_grad():
-                for samples, seg_labels, cls_label in validation:
+                for samples, seg_labels, cls_label in test:
                     samples, seg_labels, cls_label = samples.to(device), seg_labels.to(device), cls_label.to(device)
                     preds = my_model(samples, cls_label)
                     val_loss = loss_fn(preds, seg_labels)
