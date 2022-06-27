@@ -1,11 +1,7 @@
-import torch
 import numpy as np
 
 
 def calculate_shape_IoU(pred, seg_label, category_id, mapping):
-    pred = torch.max(pred.permute(0, 2, 1), dim=2)[1].detach().cpu().numpy()
-    seg_label = torch.max(seg_label.permute(0, 2, 1), dim=2)[1].detach().cpu().numpy()
-    category_id = torch.max(category_id[:, :, 0], dim=1)[1].detach().cpu().numpy()
     category_id_to_hash_code_mapping = {}
     for hash_code in list(mapping.keys()):
         category_id_to_hash_code_mapping[str(mapping[hash_code]['category_id'])] = hash_code

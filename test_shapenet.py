@@ -6,6 +6,7 @@ import torch
 import warnings
 import os
 import importlib
+import numpy as np
 
 
 @hydra.main(version_base=None, config_path="./configs", config_name="default.yaml")
@@ -80,22 +81,28 @@ def main(config):
 
     # start test
     loss_list = []
-    shape_ious = []
-    categories = []
+    pred_list = []
+    seg_label_list = []
+    cls_label_list = []
     print('Start testing, please wait...')
-    for samples, seg_labels, cls_label in test:
-        samples, seg_labels, cls_label = samples.to(device), seg_labels.to(device), cls_label.to(device)
-        preds = my_model(samples, cls_label)
-        loss = loss_fn(preds, seg_labels)
-        loss_list.append(loss.detach())
-        shape_iou, category = metrics.calculate_shape_IoU(preds, seg_labels, cls_label, config.datasets.mapping)
-        shape_ious.extend(shape_iou)
-        categories.extend(category)
+    with torch.no_grad():
+        for samples, seg_labels, cls_label in test:
+            samples, seg_labels, cls_label = samples.to(device), seg_labels.to(device), cls_label.to(device)
+            preds = my_model(samples, cls_label)
+            loss = loss_fn(preds, seg_labels)
+            loss_list.append(loss.detach().cpu().numpy())
+            pred_list.append(torch.max(preds.permute(0, 2, 1), dim=2)[1].detach().cpu().numpy())
+            seg_label_list.append(torch.max(seg_labels.permute(0, 2, 1), dim=2)[1].detach().cpu().numpy())
+            cls_label_list.append(torch.max(cls_label[:, :, 0], dim=1)[1].detach().cpu().numpy())
 
     # calculate metrics
+    preds = np.concatenate(pred_list, axis=0)
+    seg_labels = np.concatenate(seg_label_list, axis=0)
+    cls_label = np.concatenate(cls_label_list, axis=0)
+    shape_ious, categories = metrics.calculate_shape_IoU(preds, seg_labels, cls_label, config.datasets.mapping)
+    category_iou = metrics.calculate_category_IoU(shape_ious, categories, config.datasets.mapping)
     loss = sum(loss_list) / len(loss_list)
     miou = sum(shape_ious) / len(shape_ious)
-    category_iou = metrics.calculate_category_IoU(shape_ious, categories, config.datasets.mapping)
     print('='*60)
     print(f'loss: {loss}')
     print(f'mIoU: {miou}')

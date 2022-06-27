@@ -26,6 +26,16 @@ def unpack_dataset(file, unpacked_path):
     return str(Path(unpacked_path, os.path.splitext(os.path.basename(file))[0]).resolve())
 
 
+# def download_shapenet(url, saved_path):
+#     if not os.path.exists(saved_path):
+#         os.makedirs(saved_path)
+#     if not os.path.exists(os.path.join(saved_path, 'shapenet_part_seg_hdf5_data')):
+#         zipfile = os.path.basename(url)
+#         os.system('wget %s --no-check-certificate; unzip %s' % (url, zipfile))
+#         os.system('mv %s %s' % ('hdf5_data', os.path.join(saved_path, 'shapenet_part_seg_hdf5_data')))
+#         os.system('rm %s' % (zipfile))
+
+
 def get_shapenet_dataloader(url, saved_path, unpacked_path, mapping, selected_points=1024, seed=0, batch_size=32,
                             shuffle=True, num_workers=1, prefetch=64, pin_memory=True):
     # check if dataset already exists
@@ -56,6 +66,31 @@ def get_shapenet_dataloader(url, saved_path, unpacked_path, mapping, selected_po
     return train_loader, validation_loader, test_loader
 
 
+# def load_shapenet(url, saved_path, partition):
+#     download_shapenet(url, saved_path)
+#     all_data = []
+#     all_label = []
+#     all_seg = []
+#     if partition == 'trainval':
+#         file = glob.glob(os.path.join(saved_path, 'shapenet_part_seg_hdf5_data', '*train*.h5')) \
+#                + glob.glob(os.path.join(saved_path, 'shapenet_part_seg_hdf5_data', '*val*.h5'))
+#     else:
+#         file = glob.glob(os.path.join(saved_path, 'shapenet_part_seg_hdf5_data', '*%s*.h5'%partition))
+#     for h5_name in file:
+#         f = h5py.File(h5_name, 'r+')
+#         data = f['data'][:].astype('float32')
+#         label = f['label'][:].astype('float32')
+#         seg = f['pid'][:].astype('float32')
+#         f.close()
+#         all_data.append(data)
+#         all_label.append(label)
+#         all_seg.append(seg)
+#     all_data = np.concatenate(all_data, axis=0)
+#     all_label = np.concatenate(all_label, axis=0)
+#     all_seg = np.concatenate(all_seg, axis=0)
+#     return all_data, all_label, all_seg
+
+
 def get_modelnet_dataloader():
     pass
 
@@ -80,14 +115,14 @@ class ShapeNet(torch.utils.data.Dataset):
         sample = self.samples[index]
         category_hash, pcd_hash = sample.split('/')[1:]
 
-        # get category one hot
-        category_id = self.mapping[category_hash]['category_id']
-        category_id = F.one_hot(torch.Tensor([category_id]).long(), 16).to(torch.float32).permute(1, 0)
-
         # get point cloud seg label
         parts_id = self.mapping[category_hash]['parts_id']
         seg_label_path = os.path.join(self.root, category_hash, 'points_label', f'{pcd_hash}.seg')
         seg_label = np.loadtxt(seg_label_path).astype('float32')
+        # shuffle points within one point cloud
+        indices = list(range(seg_label.shape[0]))
+        np.random.shuffle(indices)
+        seg_label = seg_label[indices]
         # get a fixed number of points from every point cloud
         np.random.seed(self.seed)
         if self.selected_points <= len(seg_label):
@@ -100,9 +135,17 @@ class ShapeNet(torch.utils.data.Dataset):
         seg_label = seg_label + diff
         seg_label = F.one_hot(torch.Tensor(seg_label).long(), 50).to(torch.float32).permute(1, 0)
 
+        # get category one hot
+        category_id = self.mapping[category_hash]['category_id']
+        category_id = F.one_hot(torch.Tensor([category_id]).long(), 16).to(torch.float32).permute(1, 0)
+
         # get point cloud
         pcd_path = os.path.join(self.root, category_hash, 'points', f'{pcd_hash}.pts')
-        pcd = torch.Tensor(np.loadtxt(pcd_path)[choice]).to(torch.float32).permute(1, 0)
+        pcd = np.loadtxt(pcd_path)
+        pcd = pcd[indices]
+        pcd = pcd[choice]
+        pcd = torch.Tensor(pcd).to(torch.float32)
+        pcd = pcd.permute(1, 0)
 
         # pcd.shape == (3, N)    seg_label.shape == (50, N)    category_id.shape == (16, 1)
         return pcd, seg_label, category_id

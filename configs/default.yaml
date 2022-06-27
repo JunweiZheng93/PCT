@@ -37,12 +37,12 @@ train:
     cosLR:
       T_max: ${epochs}  # maximum epochs
       eta_min: 1e-3  # minimum lr
-  optimizer: adam  # adam or sgd
+  optimizer: adamw  # adamw or sgd
   which_gpu: [0]  # if you want to use multiple gpus, enter [0, 1, 2] for gpu #0, #1, #2
   pin_memory: true  # pin memory in RAM
   validation_freq: 1  # frequency in epoch(s) to validate the model
-  label_smoothing: true
-  epsilon: 0.2
+  label_smoothing: false
+  epsilon: 0.2  # epsilon for label smoothing
   dataloader:
     batch_size: 8
     shuffle: true
@@ -52,8 +52,8 @@ train:
 test:
   which_gpu: [0]  # the name of the run you want to test
   pin_memory: true  # pin memory in RAM
-  label_smoothing: true
-  epsilon: 0.2
+  label_smoothing: false
+  epsilon: 0.2  # epsilon for label smoothing
   dataloader:
     batch_size: 8
     shuffle: false

@@ -4,9 +4,13 @@ To install all dependencies, enter:
 ```bash
 pip install -r requirements.txt
 ```
+Be careful, please install PyTorch using this command:
+```bash
+conda install pytorch=1.11.0 cudatoolkit=11.3 -c pytorch
+```
 
 # How to run
-`python train.py usr_config=YOUR/USR/CONFIG/PATH`
+`python train_shapenet.py usr_config=YOUR/USR/CONFIG/PATH`
 
 # About configuration files
 The train/test script will read the default configuration file (`./configs/default.yaml`) and the user specified 
