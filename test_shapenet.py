@@ -51,8 +51,7 @@ def main(config):
 
     # get datasets
     _, _, test = dataloader.get_shapenet_dataloader(config.datasets.url, config.datasets.saved_path, config.datasets.unpack_path, config.datasets.mapping, config.datasets.selected_points, config.datasets.seed,
-                                                    config.test.dataloader.batch_size, config.test.dataloader.shuffle, config.test.dataloader.num_workers, config.test.dataloader.prefetch, config.test.pin_memory,
-                                                    config.test.dataloader.smoothing, config.test.dataloader.epsilon)
+                                                    config.test.dataloader.batch_size, config.test.dataloader.shuffle, config.test.dataloader.num_workers, config.test.dataloader.prefetch, config.test.pin_memory)
 
     # get model
     my_model = shapenet_model.ShapeNetModel(config.point2neighbor_block.enable, config.point2neighbor_block.use_embedding, config.point2neighbor_block.embedding_channels_in,
@@ -73,6 +72,12 @@ def main(config):
     if torch.cuda.is_available():
         my_model = torch.nn.DataParallel(my_model, device_ids=config.test.which_gpu)
 
+    # get loss function
+    if config.test.label_smoothing:
+        loss_fn = torch.nn.CrossEntropyLoss(reduction='mean', label_smoothing=config.test.epsilon)
+    else:
+        loss_fn = torch.nn.CrossEntropyLoss(reduction='mean')
+
     # start test
     loss_list = []
     shape_ious = []
@@ -80,8 +85,8 @@ def main(config):
     print('Start testing, please wait...')
     for samples, seg_labels, cls_label in test:
         samples, seg_labels, cls_label = samples.to(device), seg_labels.to(device), cls_label.to(device)
-        preds, loss = my_model(samples, cls_label, seg_labels)
-        loss = torch.sum(loss) / config.test.dataloader.batch_size
+        preds = my_model(samples, cls_label)
+        loss = loss_fn(preds, seg_labels)
         loss_list.append(loss.detach())
         shape_iou, category = metrics.calculate_shape_IoU(preds, seg_labels, cls_label, config.datasets.mapping)
         shape_ious.extend(shape_iou)

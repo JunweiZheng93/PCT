@@ -41,24 +41,24 @@ train:
   which_gpu: [0]  # if you want to use multiple gpus, enter [0, 1, 2] for gpu #0, #1, #2
   pin_memory: true  # pin memory in RAM
   validation_freq: 1  # frequency in epoch(s) to validate the model
+  label_smoothing: true
+  epsilon: 0.2
   dataloader:
     batch_size: 8
     shuffle: true
     num_workers: 16  # the number of subprocess to load data
     prefetch: 32  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
-    label_smoothing: true
-    epsilon: 0.2
 
 test:
   which_gpu: [0]  # the name of the run you want to test
   pin_memory: true  # pin memory in RAM
+  label_smoothing: true
+  epsilon: 0.2
   dataloader:
     batch_size: 8
     shuffle: false
     num_workers: 16  # the number of subprocess to load data
     prefetch: 32  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
-    label_smoothing: true
-    epsilon: 0.2
 
 edgeconv_block:
   K: [32, 32, 32]

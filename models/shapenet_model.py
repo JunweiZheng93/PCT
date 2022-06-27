@@ -265,9 +265,7 @@ class ShapeNetModel(nn.Module):
         self.dp1 = nn.Dropout(p=0.5)
         self.dp2 = nn.Dropout(p=0.5)
 
-        self.loss_fn = nn.CrossEntropyLoss(size_average=False, reduce=False, reduction='none')
-
-    def forward(self, x, category_id, seg_label):
+    def forward(self, x, category_id):
         # x.shape == (B, C=3, N)  category_id.shape == (B, 16, 1)
         B, C, N = x.shape
         # x.shape == (B, C=3, N)
@@ -298,5 +296,4 @@ class ShapeNetModel(nn.Module):
         # x.shape == (B, 128, N)
         x = self.conv5(x)
         # x.shape == (B, 50, N)
-        loss = self.loss_fn(x, seg_label)
-        return x, loss
+        return x

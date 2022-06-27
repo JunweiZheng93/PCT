@@ -40,8 +40,7 @@ def main(config):
 
     # get datasets
     train, validation, _ = dataloader.get_shapenet_dataloader(config.datasets.url, config.datasets.saved_path, config.datasets.unpack_path, config.datasets.mapping, config.datasets.selected_points, config.datasets.seed,
-                                                              config.train.dataloader.batch_size, config.train.dataloader.shuffle, config.train.dataloader.num_workers, config.train.dataloader.prefetch, config.train.pin_memory,
-                                                              config.train.dataloader.label_smoothing, config.train.dataloader.epsilon)
+                                                              config.train.dataloader.batch_size, config.train.dataloader.shuffle, config.train.dataloader.num_workers, config.train.dataloader.prefetch, config.train.pin_memory)
 
     # get model
     my_model = shapenet_model.ShapeNetModel(config.point2neighbor_block.enable, config.point2neighbor_block.use_embedding, config.point2neighbor_block.embedding_channels_in,
@@ -64,7 +63,7 @@ def main(config):
     if config.train.optimizer == 'adam':
         optimizer = torch.optim.Adam(my_model.parameters(), lr=config.train.lr, weight_decay=1e-4)
     elif config.train.optimizer == 'sgd':
-        optimizer = torch.optim.SGD(my_model.parameters(), lr=config.train.lr, weight_decay=1e-4)
+        optimizer = torch.optim.SGD(my_model.parameters(), lr=config.train.lr, weight_decay=1e-4, momentum=0.9)
     else:
         raise ValueError('Not implemented!')
 
@@ -79,6 +78,12 @@ def main(config):
         else:
             raise ValueError('Not implemented!')
 
+    # get loss function
+    if config.train.label_smoothing:
+        loss_fn = torch.nn.CrossEntropyLoss(reduction='mean', label_smoothing=config.train.epsilon)
+    else:
+        loss_fn = torch.nn.CrossEntropyLoss(reduction='mean')
+
     for epoch in range(config.train.epochs):
         # start training
         my_model.train()
@@ -88,8 +93,8 @@ def main(config):
         categories = []
         for i, (samples, seg_labels, cls_label) in enumerate(train):
             samples, seg_labels, cls_label = samples.to(device), seg_labels.to(device), cls_label.to(device)
-            preds, train_loss = my_model(samples, cls_label, seg_labels)
-            train_loss = torch.sum(train_loss) / config.train.dataloader.batch_size
+            preds = my_model(samples, cls_label)
+            train_loss = loss_fn(preds, seg_labels)
             optimizer.zero_grad()
             train_loss.backward()
             optimizer.step()
@@ -123,8 +128,8 @@ def main(config):
             categories = []
             for samples, seg_labels, cls_label in validation:
                 samples, seg_labels, cls_label = samples.to(device), seg_labels.to(device), cls_label.to(device)
-                preds, val_loss = my_model(samples, cls_label, seg_labels)
-                val_loss = torch.sum(val_loss) / config.train.dataloader.batch_size
+                preds = my_model(samples, cls_label)
+                val_loss = loss_fn(preds, seg_labels)
                 val_loss_list.append(val_loss.detach())
                 shape_iou, category = metrics.calculate_shape_IoU(preds, seg_labels, cls_label, config.datasets.mapping)
                 shape_ious.extend(shape_iou)
