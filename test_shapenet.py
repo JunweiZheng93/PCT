@@ -7,6 +7,7 @@ import warnings
 import os
 import importlib
 import numpy as np
+from utils import dataloader, metrics
 
 
 @hydra.main(version_base=None, config_path="./configs", config_name="default.yaml")
@@ -35,15 +36,8 @@ def main(config):
     else:
         raise ValueError('W&B is not enabled!')
 
-    # import modules saved by previous run
-    dataloader = importlib.import_module(f"artifacts.{config.wandb.name}.dataloader")
-    shapenet_model = importlib.import_module(f"artifacts.{config.wandb.name}.shapenet_model")
-    metrics = importlib.import_module(f"artifacts.{config.wandb.name}.metrics")
-
     # overwrite the default config with previous run config
     run_config = OmegaConf.load(f'{local_path}/usr_config.yaml')
-    for key in list(test_config.keys()):
-        del run_config[key]
     config = OmegaConf.merge(config, run_config)
 
     # gpu setting
@@ -51,10 +45,17 @@ def main(config):
     warnings.filterwarnings("ignore", category=UserWarning)
 
     # get datasets
-    _, _, _, test = dataloader.get_shapenet_dataloader(config.datasets.url, config.datasets.saved_path, config.datasets.unpack_path, config.datasets.mapping, config.datasets.selected_points, config.datasets.seed,
-                                                       config.test.dataloader.batch_size, config.test.dataloader.shuffle, config.test.dataloader.num_workers, config.test.dataloader.prefetch, config.test.pin_memory)
+    if config.datasets.dataset_name == 'shapenet_Yi650M':
+        _, _, _, test = dataloader.get_shapenet_dataloader_Yi650M(config.datasets.url, config.datasets.saved_path, config.datasets.unpack_path, config.datasets.mapping, config.datasets.selected_points, config.datasets.seed,
+                                                                  config.test.dataloader.batch_size, config.test.dataloader.shuffle, config.test.dataloader.num_workers, config.test.dataloader.prefetch, config.test.pin_memory)
+    elif config.datasets.dataset_name == 'shapenet_AnTao350M':
+        _, _, _, test = dataloader.get_shapenet_dataloader_AnTao350M(config.datasets.url, config.datasets.saved_path, config.datasets.selected_points,
+                                                                     config.test.dataloader.batch_size, config.test.dataloader.shuffle, config.test.dataloader.num_workers, config.test.dataloader.prefetch, config.test.pin_memory)
+    else:
+        raise ValueError('Not implemented!')
 
     # get model
+    shapenet_model = importlib.import_module(f"artifacts.{config.wandb.name}.shapenet_model")
     my_model = shapenet_model.ShapeNetModel(config.point2neighbor_block.enable, config.point2neighbor_block.use_embedding, config.point2neighbor_block.embedding_channels_in,
                                             config.point2neighbor_block.embedding_channels_out, config.point2neighbor_block.point2neighbor.K,
                                             config.point2neighbor_block.point2neighbor.xyz_or_feature, config.point2neighbor_block.point2neighbor.feature_or_diff,
@@ -68,10 +69,9 @@ def main(config):
                                             config.point2point_block.point2point.ff_conv1_channels_out, config.point2point_block.point2point.ff_conv2_channels_in,
                                             config.point2point_block.point2point.ff_conv2_channels_out, config.conv_block.channels_in, config.conv_block.channels_out)
     my_model.load_state_dict(torch.load(f'{local_path}/checkpoint.pt'))
-    my_model.to(device)
     my_model.eval()
     if torch.cuda.is_available():
-        my_model = torch.nn.DataParallel(my_model, device_ids=config.test.which_gpu)
+        my_model = torch.nn.DataParallel(my_model.to(device), device_ids=config.test.which_gpu, output_device=config.test.which_gpu[0])
 
     # get loss function
     if config.test.label_smoothing:

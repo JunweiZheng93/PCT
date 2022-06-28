@@ -1,0 +1,22 @@
+dataset_name: shapenet_Yi650M
+url: https://shapenet.cs.stanford.edu/ericyi/shapenetcore_partanno_segmentation_benchmark_v0.zip
+saved_path: ./datasets/  # path to save the zip file
+unpack_path: ./datasets/  # path to unpack the zip file
+selected_points: 2048  # points to be selected from every point cloud
+seed: 0
+mapping: {'02691156': {'category': 'airplane', 'category_id': 0, 'parts_id': [0, 1, 2, 3]},
+          '02773838': {'category': 'bag', 'category_id': 1, 'parts_id': [4, 5]},
+          '02954340': {'category': 'cap', 'category_id': 2, 'parts_id': [6, 7]},
+          '02958343': {'category': 'car', 'category_id': 3, 'parts_id': [8, 9, 10, 11]},
+          '03001627': {'category': 'chair', 'category_id': 4, 'parts_id': [12, 13, 14, 15]},
+          '03261776': {'category': 'earphone', 'category_id': 5, 'parts_id': [16, 17, 18]},
+          '03467517': {'category': 'guitar', 'category_id': 6, 'parts_id': [19, 20, 21]},
+          '03624134': {'category': 'knife', 'category_id': 7, 'parts_id': [22, 23]},
+          '03636649': {'category': 'lamp', 'category_id': 8, 'parts_id': [24, 25, 26, 27]},
+          '03642806': {'category': 'laptop', 'category_id': 9, 'parts_id': [28, 29]},
+          '03790512': {'category': 'motorbike', 'category_id': 10, 'parts_id': [30, 31, 32, 33, 34, 35]},
+          '03797390': {'category': 'mug', 'category_id': 11, 'parts_id': [36, 37]},
+          '03948459': {'category': 'pistol', 'category_id': 12, 'parts_id': [38, 39, 40]},
+          '04099429': {'category': 'rocket', 'category_id': 13, 'parts_id': [41, 42, 43]},
+          '04225987': {'category': 'skateboard', 'category_id': 14, 'parts_id': [44, 45, 46]},
+          '04379243': {'category': 'table', 'category_id': 15, 'parts_id': [47, 48, 49]}}

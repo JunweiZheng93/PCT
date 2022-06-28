@@ -10,7 +10,6 @@ import wandb
 from utils import metrics
 import os
 import shutil
-import copy
 import numpy as np
 
 
@@ -31,7 +30,7 @@ def main(config):
     if config.wandb.enable:
         # initialize wandb
         wandb.login(key=config.wandb.api_key)
-        del config.wandb.api_key
+        del config.wandb.api_key, config.test
         config_dict = OmegaConf.to_container(config, resolve=True)
         run = wandb.init(project=config.wandb.project, entity=config.wandb.entity, config=config_dict, name=config.wandb.name)
 
@@ -40,8 +39,17 @@ def main(config):
     warnings.filterwarnings("ignore", category=UserWarning)
 
     # get datasets
-    train, validation, trainval, test = dataloader.get_shapenet_dataloader(config.datasets.url, config.datasets.saved_path, config.datasets.unpack_path, config.datasets.mapping, config.datasets.selected_points, config.datasets.seed,
-                                                                           config.train.dataloader.batch_size, config.train.dataloader.shuffle, config.train.dataloader.num_workers, config.train.dataloader.prefetch, config.train.pin_memory)
+    if config.datasets.dataset_name == 'shapenet_Yi650M':
+        train, validation, trainval, test = dataloader.get_shapenet_dataloader_Yi650M(config.datasets.url, config.datasets.saved_path, config.datasets.unpack_path, config.datasets.mapping, config.datasets.selected_points, config.datasets.seed,
+                                                                                      config.train.dataloader.batch_size, config.train.dataloader.shuffle, config.train.dataloader.num_workers, config.train.dataloader.prefetch, config.train.pin_memory)
+    elif config.datasets.dataset_name == 'shapenet_AnTao350M':
+        train, validation, trainval, test = dataloader.get_shapenet_dataloader_AnTao350M(config.datasets.url, config.datasets.saved_path, config.datasets.selected_points,
+                                                                                         config.train.dataloader.batch_size, config.train.dataloader.shuffle, config.train.dataloader.num_workers, config.train.dataloader.prefetch, config.train.pin_memory)
+    else:
+        raise ValueError('Not implemented!')
+    if config.train.dataloader.combine_trainval:
+        train = trainval
+        validation = test
 
     # get model
     my_model = shapenet_model.ShapeNetModel(config.point2neighbor_block.enable, config.point2neighbor_block.use_embedding, config.point2neighbor_block.embedding_channels_in,
@@ -56,9 +64,8 @@ def main(config):
                                             config.point2point_block.point2point.qkv_channels, config.point2point_block.point2point.ff_conv1_channels_in,
                                             config.point2point_block.point2point.ff_conv1_channels_out, config.point2point_block.point2point.ff_conv2_channels_in,
                                             config.point2point_block.point2point.ff_conv2_channels_out, config.conv_block.channels_in, config.conv_block.channels_out)
-    my_model.to(device)
     if torch.cuda.is_available():
-        my_model = torch.nn.DataParallel(my_model, device_ids=config.train.which_gpu)
+        my_model = torch.nn.DataParallel(my_model.to(device), device_ids=config.train.which_gpu, output_device=config.train.which_gpu[0])
 
     # get optimizer
     if config.train.optimizer == 'adamw':
@@ -85,15 +92,16 @@ def main(config):
     else:
         loss_fn = torch.nn.CrossEntropyLoss(reduction='mean')
 
+    val_miou_list = [0]
     for epoch in range(config.train.epochs):
         # start training
         my_model.train()
-        kbar = pkbar.Kbar(target=len(trainval), epoch=epoch, num_epochs=config.train.epochs, always_stateful=True)
         train_loss_list = []
         pred_list = []
         seg_label_list = []
         cls_label_list = []
-        for i, (samples, seg_labels, cls_label) in enumerate(trainval):
+        kbar = pkbar.Kbar(target=len(train), epoch=epoch, num_epochs=config.train.epochs, always_stateful=True)
+        for i, (samples, seg_labels, cls_label) in enumerate(train):
             samples, seg_labels, cls_label = samples.to(device), seg_labels.to(device), cls_label.to(device)
             preds = my_model(samples, cls_label)
             train_loss = loss_fn(preds, seg_labels)
@@ -119,8 +127,8 @@ def main(config):
         train_miou = sum(shape_ious) / len(shape_ious)
 
         # log results
-        metric_dict = {'train': {'shapenet': {'lr': current_lr, 'loss': train_loss, 'mIoU': train_miou}}}
-        metric_dict['train']['shapenet'].update(train_category_iou)
+        metric_dict = {'shapenet_train': {'lr': current_lr, 'loss': train_loss, 'mIoU': train_miou}}
+        metric_dict['shapenet_train'].update(train_category_iou)
         if config.wandb.enable and (epoch+1) % config.train.validation_freq:
             wandb.log(metric_dict, commit=True)
         elif config.wandb.enable and not (epoch+1) % config.train.validation_freq:
@@ -134,7 +142,7 @@ def main(config):
             seg_label_list = []
             cls_label_list = []
             with torch.no_grad():
-                for samples, seg_labels, cls_label in test:
+                for samples, seg_labels, cls_label in validation:
                     samples, seg_labels, cls_label = samples.to(device), seg_labels.to(device), cls_label.to(device)
                     preds = my_model(samples, cls_label)
                     val_loss = loss_fn(preds, seg_labels)
@@ -152,20 +160,21 @@ def main(config):
             val_loss = sum(val_loss_list) / len(val_loss_list)
             val_miou = sum(shape_ious) / len(shape_ious)
 
+            # save model
+            if val_miou >= max(val_miou_list):
+                state_dict = my_model.state_dict()
+                for key in list(state_dict.keys()):
+                    if key.startswith('module'):  # the keys will start with 'module' when using gpu
+                        state_dict[key[7:]] = state_dict.pop(key)
+                torch.save(state_dict, './wandb/latest-run/files/checkpoint.pt')
+            val_miou_list.append(val_miou)
+
             # log results
-            metric_dict = {'validation': {'shapenet': {'loss': val_loss, 'mIoU': val_miou}}}
-            metric_dict['validation']['shapenet'].update(val_category_iou)
+            metric_dict = {'shapenet_val': {'loss': val_loss, 'mIoU': val_miou}}
+            metric_dict['shapenet_val'].update(val_category_iou)
             kbar.update(i+1, values=[('lr', current_lr), ('train_loss', train_loss), ('train_mIoU', train_miou), ('val_loss', val_loss), ('val_mIoU', val_miou)])
             if config.wandb.enable:
                 wandb.log(metric_dict, commit=True)
-                # save model
-                if epoch >= 1 and val_miou > val_miou_old:
-                    state_dict = my_model.state_dict()
-                    for key in list(state_dict.keys()):
-                        if key.startswith('module'):  # the keys will start with 'module' when using gpu
-                            state_dict[key[7:]] = state_dict.pop(key)
-                    torch.save(state_dict, './wandb/latest-run/files/checkpoint.pt')
-                val_miou_old = copy.deepcopy(val_miou)
         else:
             kbar.update(i+1, values=[('lr', current_lr), ('train_loss', train_loss), ('train_mIoU', train_miou)])
 

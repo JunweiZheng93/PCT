@@ -32,5 +32,5 @@ def calculate_category_IoU(shape_ious, categories, mapping):
     for category, shape_iou in zip(categories, shape_ious):
         collections[category].append(shape_iou)
     for category in list(collections.keys()):
-        category_IoU[f'{category}_IoU'] = sum(collections[category]) / len(collections[category])
+        category_IoU[category] = sum(collections[category]) / len(collections[category])
     return category_IoU

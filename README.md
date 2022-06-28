@@ -10,7 +10,14 @@ conda install pytorch=1.11.0 cudatoolkit=11.3 -c pytorch
 ```
 
 # How to run
-`python train_shapenet.py usr_config=YOUR/USR/CONFIG/PATH`
+When using `AnTao350M` dataset, run:
+```bash
+python train_shapenet.py datasets=shapenet_AnTao350M usr_config=YOUR/USR/CONFIG/PATH
+```
+When using `Yi650M` dataset, run:
+```bash
+python train_shapenet.py datasets=shapenet_Yi650M usr_config=YOUR/USR/CONFIG/PATH
+```
 
 # About configuration files
 The train/test script will read the default configuration file (`./configs/default.yaml`) and the user specified 
@@ -28,9 +35,9 @@ train:
 ```
 Then run the train script:
 ```bash
-python train.py usr_config=YOUR/USR/CONFIG/PATH
+python train_shapenet.py datasets=shapenet_AnTao350M usr_config=YOUR/USR/CONFIG/PATH
 ```
-Check the default configuration file for legal hyper-parameters.
+Check the default configuration file for all legal hyper-parameters.
 
 # WandB (Weights and biases)
 We use wandb to log all experiment results. It is an amazing logger for deep learning. If you want to disable the wandb 
@@ -50,4 +57,5 @@ wandb:
   api_key: your api key here  # your wandb api key
   entity: kit-ies  # the place to save your runs. can be your wandb username or team name
   project: pct  # the name of your project
+  name: my_experiment  # the name of your run
 ```

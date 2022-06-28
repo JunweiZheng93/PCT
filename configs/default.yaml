@@ -7,58 +7,60 @@ hydra:
 
 usr_config: null  # e.g. project_root/configs/user_configs/user_config1.yaml
 
-################### Don't modify parameters above #######################
-
-################### You can modify all parameters below #################
 defaults:
   - _self_  # import default.yaml itself
-  - datasets: shapenet.yaml  # import shapenet.yaml
+  - datasets: ???  # import dataset
   - override hydra/hydra_logging: disabled   # disable hydra logging because we will use wandb as our logger
   - override hydra/job_logging: disabled   # disable job logging because we will use wandb as our logger
 
+################### Don't modify parameters above #######################
+
+################### You can modify all parameters below #################
+
 wandb:
   enable: true
-  api_key: null  # your wandb api key
-  project: null  # the name of your project
-  entity: null  # the place to save your runs. can be your wandb username or team name
-  name: ${now:%Y%m%d_%H%M%S}  # the name your run
+  api_key: ???  # your wandb api key
+  entity: ???  # the place to save your runs. can be your wandb username or team name
+  project: ???  # the name of your project
+  name: ???  # the name your run
 
-train:
+train:  # only valid when running the training script
   epochs: 200
-  lr: 1e-3
+  lr: 0.1
   lr_scheduler:
     enable: true
-    which: stepLR  # expLR, stepLR or cosLR
+    which: cosLR  # expLR, stepLR or cosLR
     expLR:
       gamma: 0.95
     stepLR:
       gamma: 0.2  # lr = gamma * lr, when decay step is hit
       decay_step: 50
     cosLR:
-      T_max: ${epochs}  # maximum epochs
+      T_max: ${train.epochs}  # maximum epochs
       eta_min: 1e-3  # minimum lr
-  optimizer: adamw  # adamw or sgd
+  optimizer: sgd  # adamw or sgd
   which_gpu: [0]  # if you want to use multiple gpus, enter [0, 1, 2] for gpu #0, #1, #2
   pin_memory: true  # pin memory in RAM
   validation_freq: 1  # frequency in epoch(s) to validate the model
-  label_smoothing: false
+  label_smoothing: true
   epsilon: 0.2  # epsilon for label smoothing
   dataloader:
+    combine_trainval: true  # combine train and validation set as train set
     batch_size: 8
     shuffle: true
     num_workers: 16  # the number of subprocess to load data
-    prefetch: 32  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
+    prefetch: ${train.dataloader.batch_size}  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
 
-test:
+test:  # only valid when running the test script
   which_gpu: [0]  # the name of the run you want to test
   pin_memory: true  # pin memory in RAM
-  label_smoothing: false
+  label_smoothing: true
   epsilon: 0.2  # epsilon for label smoothing
   dataloader:
     batch_size: 8
     shuffle: false
     num_workers: 16  # the number of subprocess to load data
-    prefetch: 32  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
+    prefetch: ${test.dataloader.batch_size}  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
 
 edgeconv_block:
   K: [32, 32, 32]
