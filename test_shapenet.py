@@ -51,7 +51,7 @@ def main(config):
     warnings.filterwarnings("ignore", category=UserWarning)
 
     # get datasets
-    _, _, _, test = dataloader.get_shapenet_dataloader(config.datasets.url, config.datasets.saved_path, config.datasets.unpack_path, config.datasets.mapping, config.datasets.selected_points,
+    _, _, _, test = dataloader.get_shapenet_dataloader(config.datasets.url, config.datasets.saved_path, config.datasets.unpack_path, config.datasets.mapping, config.datasets.selected_points, config.datasets.seed,
                                                        config.test.dataloader.batch_size, config.test.dataloader.shuffle, config.test.dataloader.num_workers, config.test.dataloader.prefetch, config.test.pin_memory)
 
     # get model
