@@ -8,7 +8,6 @@ import pkbar
 import wandb
 from utils import metrics
 import os
-import shutil
 import torch.multiprocessing as mp
 import torch.distributed as dist
 from torch.cuda import amp
@@ -46,7 +45,7 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
         wandb.login(key=config.wandb.api_key)
         del config.wandb.api_key, config.test
         config_dict = OmegaConf.to_container(config, resolve=True)
-        logger = wandb.init(project=config.wandb.project, entity=config.wandb.entity, config=config_dict, name=config.wandb.name)
+        run = wandb.init(project=config.wandb.project, entity=config.wandb.entity, config=config_dict, name=config.wandb.name)
 
     # process initialization
     os.environ['MASTER_ADDR'] = str(config.train.ddp.master_addr)
@@ -229,7 +228,7 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
                     # save model
                     if val_miou >= max(val_miou_list):
                         state_dict = my_model.state_dict()
-                        torch.save(state_dict, './wandb/latest-run/files/checkpoint.pt')
+                        torch.save(state_dict, f'/tmp/{run.id}_checkpoint.pt')
                     val_miou_list.append(val_miou)
         else:
             if rank == 0:
@@ -239,17 +238,15 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
     if config.wandb.enable and rank == 0:
         artifacts = wandb.Artifact(config.wandb.name, type='runs')
         # add configuration file
-        OmegaConf.save(config=config, f='./usr_config.yaml', resolve=False)
-        artifacts.add_file('./usr_config.yaml')
-        os.remove('./usr_config.yaml')
+        OmegaConf.save(config=config, f=f'/tmp/{run.id}_usr_config.yaml', resolve=False)
+        artifacts.add_file(f'/tmp/{run.id}_usr_config.yaml', name='usr_config.yaml')
         # add model architecture
-        artifacts.add_file('./models/shapenet_model.py')
+        artifacts.add_file('./models/shapenet_model.py', name='shapenet_model.py')
         # add model weights
-        artifacts.add_file('./wandb/latest-run/files/checkpoint.pt')
+        artifacts.add_file(f'/tmp/{run.id}_checkpoint.pt', name='checkpoint.pt')
         # log artifacts
-        logger.log_artifact(artifacts)
+        run.log_artifact(artifacts)
         wandb.finish(quiet=True)
-        shutil.rmtree('./wandb/')
 
 
 if __name__ == '__main__':
