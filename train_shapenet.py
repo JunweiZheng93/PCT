@@ -28,28 +28,27 @@ def main(config):
         usr_config = OmegaConf.load(config.usr_config)
         config = OmegaConf.merge(config, usr_config)
 
-    if config.wandb.enable:
+    # multiprocessing for ddp
+    if torch.cuda.is_available():
+        os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'  # read .h5 file using multiprocessing will raise error
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(config.train.ddp.which_gpu).replace(' ', '').replace('[', '').replace(']', '')
+        mp.spawn(train, args=(config,), nprocs=config.train.ddp.nproc_this_node, join=True)
+    else:
+        exit('It is almost impossible to train this model using CPU. Please use GPU! Exit.')
+
+
+def train(local_rank, config):  # the first arg must be local rank for the sake of using mp.spawn(...)
+
+    rank = config.train.ddp.rank_starts_from + local_rank
+
+    if config.wandb.enable and rank == 0:
         # initialize wandb
         wandb.login(key=config.wandb.api_key)
         del config.wandb.api_key, config.test
         config_dict = OmegaConf.to_container(config, resolve=True)
         logger = wandb.init(project=config.wandb.project, entity=config.wandb.entity, config=config_dict, name=config.wandb.name)
-    else:
-        logger = None
-
-    # multiprocessing for ddp
-    if torch.cuda.is_available():
-        os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'  # read .h5 file using multiprocessing will raise error
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(config.train.ddp.which_gpu).replace(' ', '').replace('[', '').replace(']', '')
-        mp.spawn(train, args=(config, logger), nprocs=config.train.ddp.nproc_this_node, join=True)
-    else:
-        exit('It is almost impossible to train this model using CPU. Please use GPU! Exit.')
-
-
-def train(local_rank, config, logger):  # the first arg must be local rank for the sake of using mp.spawn(...)
 
     # process initialization
-    rank = config.train.ddp.rank_starts_from + local_rank
     os.environ['MASTER_ADDR'] = str(config.train.ddp.master_addr)
     os.environ['MASTER_PORT'] = str(config.train.ddp.master_port)
     os.environ['WORLD_SIZE'] = str(config.train.ddp.world_size)
