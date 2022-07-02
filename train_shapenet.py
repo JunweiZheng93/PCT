@@ -240,10 +240,14 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
         # add configuration file
         OmegaConf.save(config=config, f=f'/tmp/{run.id}_usr_config.yaml', resolve=False)
         artifacts.add_file(f'/tmp/{run.id}_usr_config.yaml', name='usr_config.yaml')
-        # add model architecture
+        # add source codes
         artifacts.add_file('./models/shapenet_model.py', name='shapenet_model.py')
-        # add model weights
         artifacts.add_file(f'/tmp/{run.id}_checkpoint.pt', name='checkpoint.pt')
+        artifacts.add_file('./utils/dataloader.py', name='dataloader.py')
+        artifacts.add_file('./utils/metrics.py', name='metrics.py')
+        artifacts.add_file('./utils/ops.py', name='ops.py')
+        artifacts.add_file('./train_shapenet.py', name='train_shapenet.py')
+        artifacts.add_file('./test_shapenet.py', name='test_shapenet.py')
         # log artifacts
         run.log_artifact(artifacts)
         wandb.finish(quiet=True)
