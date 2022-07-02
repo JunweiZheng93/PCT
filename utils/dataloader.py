@@ -85,8 +85,8 @@ class ShapeNet_Yi650M(torch.utils.data.Dataset):
         return pcd, seg_label, category_id
 
 
-def get_shapenet_dataloader_Yi650M(url, saved_path, unpacked_path, mapping, selected_points=1024, seed=0, batch_size=32,
-                                   shuffle=True, num_workers=1, prefetch=64, pin_memory=True):
+def get_shapenet_dataset_Yi650M(url, saved_path, unpacked_path, mapping, selected_points=1024, seed=0):
+
     # check if dataset already exists
     path = Path(unpacked_path, 'shapenetcore_partanno_segmentation_benchmark_v0')
     if not path.exists():
@@ -106,16 +106,7 @@ def get_shapenet_dataloader_Yi650M(url, saved_path, unpacked_path, mapping, sele
     trainval_set = ShapeNet_Yi650M(dataset_path, [train_json, validation_json], mapping, selected_points, seed)
     test_set = ShapeNet_Yi650M(dataset_path, [test_json], mapping, selected_points, seed)
 
-    # get dataloader
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size, shuffle, num_workers=num_workers,
-                                               drop_last=True, prefetch_factor=prefetch, pin_memory=pin_memory)
-    validation_loader = torch.utils.data.DataLoader(validation_set, batch_size, shuffle, num_workers=num_workers,
-                                                    drop_last=True, prefetch_factor=prefetch, pin_memory=pin_memory)
-    trainval_loader = torch.utils.data.DataLoader(trainval_set, batch_size, shuffle, num_workers=num_workers,
-                                                  drop_last=True, prefetch_factor=prefetch, pin_memory=pin_memory)
-    test_loader = torch.utils.data.DataLoader(test_set, batch_size, shuffle, num_workers=num_workers,
-                                              drop_last=True, prefetch_factor=prefetch, pin_memory=pin_memory)
-    return train_loader, validation_loader, trainval_loader, test_loader
+    return train_set, validation_set, trainval_set, test_set
 
 
 # ================================================================================
@@ -185,27 +176,15 @@ class ShapeNet_AnTao350M(torch.utils.data.Dataset):
         return pcd, seg_label, category_onehot
 
 
-def get_shapenet_dataloader_AnTao350M(url, saved_path, selected_points=1024, batch_size=32, shuffle=True,
-                                      num_workers=1, prefetch=64, pin_memory=True):
+def get_shapenet_dataset_AnTao350M(url, saved_path, selected_points=1024):
     # download dataset
     download_shapenet_AnTao350M(url, saved_path)
-
     # get dataset
     train_set = ShapeNet_AnTao350M(saved_path, 'train', selected_points)
     validation_set = ShapeNet_AnTao350M(saved_path, 'val', selected_points)
     trainval_set = ShapeNet_AnTao350M(saved_path, 'trainval', selected_points)
     test_set = ShapeNet_AnTao350M(saved_path, 'test', selected_points)
-
-    # get dataloader
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size, shuffle, num_workers=num_workers,
-                                               drop_last=True, prefetch_factor=prefetch, pin_memory=pin_memory)
-    validation_loader = torch.utils.data.DataLoader(validation_set, batch_size, shuffle, num_workers=num_workers,
-                                                    drop_last=True, prefetch_factor=prefetch, pin_memory=pin_memory)
-    trainval_loader = torch.utils.data.DataLoader(trainval_set, batch_size, shuffle, num_workers=num_workers,
-                                                  drop_last=True, prefetch_factor=prefetch, pin_memory=pin_memory)
-    test_loader = torch.utils.data.DataLoader(test_set, batch_size, shuffle, num_workers=num_workers,
-                                              drop_last=True, prefetch_factor=prefetch, pin_memory=pin_memory)
-    return train_loader, validation_loader, trainval_loader, test_loader
+    return train_set, validation_set, trainval_set, test_set
 
 
 # ================================================================================
