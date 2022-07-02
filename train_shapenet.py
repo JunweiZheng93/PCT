@@ -46,6 +46,14 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
         del config.wandb.api_key, config.test
         config_dict = OmegaConf.to_container(config, resolve=True)
         run = wandb.init(project=config.wandb.project, entity=config.wandb.entity, config=config_dict, name=config.wandb.name)
+        # cache source code for saving
+        OmegaConf.save(config=config, f=f'/tmp/{run.id}_usr_config.yaml', resolve=False)
+        os.system(f'cp ./models/shapenet_model.py /tmp/{run.id}_shapenet_model.py')
+        os.system(f'cp ./utils/dataloader.py /tmp/{run.id}_dataloader.py')
+        os.system(f'cp ./utils/metrics.py /tmp/{run.id}_metrics.py')
+        os.system(f'cp ./utils/ops.py /tmp/{run.id}_ops.py')
+        os.system(f'cp ./train_shapenet.py /tmp/{run.id}_train_shapenet.py')
+        os.system(f'cp ./test_shapenet.py /tmp/{run.id}_test_shapenet.py')
 
     # process initialization
     os.environ['MASTER_ADDR'] = str(config.train.ddp.master_addr)
@@ -89,8 +97,8 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
         validation_loader = test_loader
 
     # get model
-    my_model = shapenet_model.ShapeNetModel(config.point2neighbor_block.enable, config.point2neighbor_block.use_embedding, config.point2neighbor_block.embedding_channels_in,
-                                            config.point2neighbor_block.embedding_channels_out, config.point2neighbor_block.point2neighbor.K,
+    my_model = shapenet_model.ShapeNetModel(config.embedding.embedding_channels_in, config.embedding.embedding_channels_out,
+                                            config.point2neighbor_block.enable, config.point2neighbor_block.point2neighbor.K,
                                             config.point2neighbor_block.point2neighbor.xyz_or_feature, config.point2neighbor_block.point2neighbor.feature_or_diff,
                                             config.point2neighbor_block.point2neighbor.qkv_channels, config.point2neighbor_block.point2neighbor.ff_conv1_channels_in,
                                             config.point2neighbor_block.point2neighbor.ff_conv1_channels_out, config.point2neighbor_block.point2neighbor.ff_conv2_channels_in,
@@ -103,7 +111,7 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
                                             config.point2point_block.point2point.ff_conv2_channels_out, config.conv_block.channels_in, config.conv_block.channels_out)
 
     # synchronize bn among gpus
-    if config.train.ddp.syn_bn:  # TODO: test performance
+    if config.train.ddp.syn_bn:  #TODO: test performance
         my_model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(my_model)
 
     # get ddp model
@@ -237,18 +245,14 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
     # save artifacts to wandb server
     if config.wandb.enable and rank == 0:
         artifacts = wandb.Artifact(config.wandb.name, type='runs')
-        # add configuration file
-        OmegaConf.save(config=config, f=f'/tmp/{run.id}_usr_config.yaml', resolve=False)
         artifacts.add_file(f'/tmp/{run.id}_usr_config.yaml', name='usr_config.yaml')
-        # add source codes
-        artifacts.add_file('./models/shapenet_model.py', name='shapenet_model.py')
+        artifacts.add_file(f'/tmp/{run.id}_shapenet_model.py', name='shapenet_model.py')
+        artifacts.add_file(f'/tmp/{run.id}_dataloader.py', name='dataloader.py')
+        artifacts.add_file(f'/tmp/{run.id}_metrics.py', name='metrics.py')
+        artifacts.add_file(f'/tmp/{run.id}_ops.py', name='ops.py')
+        artifacts.add_file(f'/tmp/{run.id}_train_shapenet.py', name='train_shapenet.py')
+        artifacts.add_file(f'/tmp/{run.id}_test_shapenet.py', name='test_shapenet.py')
         artifacts.add_file(f'/tmp/{run.id}_checkpoint.pt', name='checkpoint.pt')
-        artifacts.add_file('./utils/dataloader.py', name='dataloader.py')
-        artifacts.add_file('./utils/metrics.py', name='metrics.py')
-        artifacts.add_file('./utils/ops.py', name='ops.py')
-        artifacts.add_file('./train_shapenet.py', name='train_shapenet.py')
-        artifacts.add_file('./test_shapenet.py', name='test_shapenet.py')
-        # log artifacts
         run.log_artifact(artifacts)
         wandb.finish(quiet=True)
 

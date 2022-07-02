@@ -51,25 +51,29 @@ class EdgeConv(nn.Module):
         return x
 
 
+class Embedding(nn.Module):
+    def __init__(self, emb_in, emb_out):
+        super(Embedding, self).__init__()
+        self.embedding = nn.Conv1d(emb_in, emb_out, 1, bias=False)
+
+    def forward(self, x):
+        # x.shape == (B, C, N)
+        x = self.embedding(x)
+        # x.shape == (B, C, N)
+        return x
+
+
 class Point2NeighborAttentionBlock(nn.Module):
-    def __init__(self, use_embedding=True, embedding_channels_in=3, embedding_channels_out=64,
-                 K=(32, 32, 32), xyz_or_feature=('feature', 'feature', 'feature'),
+    def __init__(self, K=(32, 32, 32), xyz_or_feature=('feature', 'feature', 'feature'),
                  feature_or_diff=('diff', 'diff', 'diff'), qkv_channels=(64, 64, 64),
                  ff_conv1_channels_in=(64, 64, 64), ff_conv1_channels_out=(128, 128, 128),
                  ff_conv2_channels_in=(128, 128, 128), ff_conv2_channels_out=(64, 64, 64)):
         super(Point2NeighborAttentionBlock, self).__init__()
-        self.use_embedding = use_embedding
-        if use_embedding:
-            self.embedding = nn.Conv1d(embedding_channels_in, embedding_channels_out, 1, bias=False)
         self.point2neighbor_list = nn.ModuleList([Point2NeighborAttention(k, x_or_f, f_or_d, qkv_channel, ff_conv1_channel_in, ff_conv1_channel_out, ff_conv2_channel_in, ff_conv2_channel_out)
                                                   for k, x_or_f, f_or_d, qkv_channel, ff_conv1_channel_in, ff_conv1_channel_out, ff_conv2_channel_in, ff_conv2_channel_out
                                                   in zip(K, xyz_or_feature, feature_or_diff, qkv_channels, ff_conv1_channels_in, ff_conv1_channels_out, ff_conv2_channels_in, ff_conv2_channels_out)])
 
     def forward(self, x):
-        if self.use_embedding:
-            # x.shape == (B, C, N)
-            x = self.embedding(x)
-            # x.shape == (B, C, N)
         x_list = []
         for point2neighbor in self.point2neighbor_list:
             x = point2neighbor(x)
@@ -223,7 +227,7 @@ class ConvBlock(nn.Module):
 
 
 class ShapeNetModel(nn.Module):
-    def __init__(self, p2neighbor_enable, p2neighbor_use_embedding, p2neighbor_embed_in, p2neighbor_embed_out, p2neighbor_K,
+    def __init__(self, embed_in, embed_out, p2neighbor_enable, p2neighbor_K,
                  p2neighbor_x_or_f, p2neighbor_f_or_d, p2neighbor_qkv_channels, p2neighbor_ff_conv1_in, p2neighbor_ff_conv1_out, p2neighbor_ff_conv2_in,
                  p2neighbor_ff_conv2_out, edgeconv_K, edgeconv_x_or_f, edgeconv_f_or_d, edgeconv_conv1_in, edgeconv_conv1_out,
                  edgeconv_conv2_in, edgeconv_conv2_out, p2point_enable, p2point_use_embedding, p2point_embed_in, p2point_embed_out,
@@ -231,11 +235,13 @@ class ShapeNetModel(nn.Module):
                  conv_block_channels_in, conv_block_channels_out):
 
         super(ShapeNetModel, self).__init__()
+        self.p2neighbor_enable = p2neighbor_enable
 
         if p2neighbor_enable:
-            self.point2neighbor_or_edgeconv = Point2NeighborAttentionBlock(p2neighbor_use_embedding, p2neighbor_embed_in, p2neighbor_embed_out, p2neighbor_K, p2neighbor_x_or_f,
-                                                                           p2neighbor_f_or_d, p2neighbor_qkv_channels, p2neighbor_ff_conv1_in, p2neighbor_ff_conv1_out,
-                                                                           p2neighbor_ff_conv2_in, p2neighbor_ff_conv2_out)
+            self.embedding = Embedding(embed_in, embed_out)
+            self.point2neighbor_or_edgeconv = Point2NeighborAttentionBlock(p2neighbor_K, p2neighbor_x_or_f, p2neighbor_f_or_d,
+                                                                           p2neighbor_qkv_channels, p2neighbor_ff_conv1_in,
+                                                                           p2neighbor_ff_conv1_out, p2neighbor_ff_conv2_in, p2neighbor_ff_conv2_out)
             x_cat_channels = sum(p2neighbor_ff_conv2_out)
         else:
             self.point2neighbor_or_edgeconv = EdgeConvBlock(edgeconv_K, edgeconv_x_or_f, edgeconv_f_or_d, edgeconv_conv1_in, edgeconv_conv1_out, edgeconv_conv2_in, edgeconv_conv2_out)
@@ -269,8 +275,11 @@ class ShapeNetModel(nn.Module):
         # x.shape == (B, C=3, N)  category_id.shape == (B, 16, 1)
         B, C, N = x.shape
         # x.shape == (B, C=3, N)
+        if self.p2neighbor_enable:
+            x = self.embedding(x)
+            # x.shape == (B, C, N)
         x, x_list = self.point2neighbor_or_edgeconv(x)
-        # x.shape == (B, C, N)    torch.cat(x_list.shape, dim=1).shape == (B, C1, N)
+        # x.shape == (B, C, N)    torch.cat(x_list, dim=1).shape == (B, C1, N)
         x = self.point2point_or_conv(x)
         # x.shape == (B, C, N)
         x = x.max(dim=-1, keepdim=True)[0]
