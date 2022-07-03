@@ -100,7 +100,7 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
     my_model = shapenet_model.ShapeNetModel(config.embedding.embedding_channels_in, config.embedding.embedding_channels_out,
                                             config.point2neighbor_block.enable, config.point2neighbor_block.point2neighbor.K,
                                             config.point2neighbor_block.point2neighbor.xyz_or_feature, config.point2neighbor_block.point2neighbor.feature_or_diff,
-                                            config.point2neighbor_block.point2neighbor.qkv_channels, config.point2neighbor_block.point2neighbor.ff_conv1_channels_in,
+                                            config.point2neighbor_block.point2neighbor.qkv_channels, config.point2neighbor_block.point2neighbor.num_heads, config.point2neighbor_block.point2neighbor.ff_conv1_channels_in,
                                             config.point2neighbor_block.point2neighbor.ff_conv1_channels_out, config.point2neighbor_block.point2neighbor.ff_conv2_channels_in,
                                             config.point2neighbor_block.point2neighbor.ff_conv2_channels_out, config.edgeconv_block.K, config.edgeconv_block.xyz_or_feature,
                                             config.edgeconv_block.feature_or_diff, config.edgeconv_block.conv1_channel_in, config.edgeconv_block.conv1_channel_out,
