@@ -51,27 +51,31 @@ class EdgeConv(nn.Module):
         return x
 
 
-class Embedding(nn.Module):
-    def __init__(self, emb_in, emb_out):
-        super(Embedding, self).__init__()
-        self.embedding = nn.Conv1d(emb_in, emb_out, 1, bias=False)
+class Point2NeighborEmbedding(nn.Module):
+    def __init__(self, q_in=3, q_out=64, k_in=3, k_out=64, v_in=3, v_out=64, num_heads=8):
+        super(Point2NeighborEmbedding, self).__init__()
+        self.embedding = CrossAttention(q_in, q_out, k_in, k_out, v_in, v_out, num_heads)
 
     def forward(self, x):
+        xyz = x[...]  # TODO: xyz_or_feature='xyz' is not correct when you stack multiple Point2NeighborAttention
         # x.shape == (B, C, N)
-        x = self.embedding(x)
+        x, neighbors = ops.group(x, xyz, self.K, self.xyz_or_feature, self.feature_or_diff, cross_attention=True)
+        # x.shape == (B, C, N, 1)    neighbors.shape == (B, C, N, K)
+        x = self.embedding(x, neighbors)
         # x.shape == (B, C, N)
         return x
 
 
 class Point2NeighborAttentionBlock(nn.Module):
     def __init__(self, K=(32, 32, 32), xyz_or_feature=('feature', 'feature', 'feature'),
-                 feature_or_diff=('diff', 'diff', 'diff'), qkv_channels=(64, 64, 64),
+                 feature_or_diff=('diff', 'diff', 'diff'), q_in=(64, 64, 64), q_out=(64, 64, 64),
+                 k_in=(64, 64, 64), k_out=(64, 64, 64), v_in=(64, 64, 64), v_out=(64, 64, 64),
                  ff_conv1_channels_in=(64, 64, 64), ff_conv1_channels_out=(128, 128, 128),
                  ff_conv2_channels_in=(128, 128, 128), ff_conv2_channels_out=(64, 64, 64), num_heads=(8, 8, 8)):
         super(Point2NeighborAttentionBlock, self).__init__()
-        self.point2neighbor_list = nn.ModuleList([Point2NeighborAttention(k, x_or_f, f_or_d, qkv_channel, ff_conv1_channel_in, ff_conv1_channel_out, ff_conv2_channel_in, ff_conv2_channel_out, heads)
-                                                  for k, x_or_f, f_or_d, qkv_channel, ff_conv1_channel_in, ff_conv1_channel_out, ff_conv2_channel_in, ff_conv2_channel_out, heads
-                                                  in zip(K, xyz_or_feature, feature_or_diff, qkv_channels, ff_conv1_channels_in, ff_conv1_channels_out, ff_conv2_channels_in, ff_conv2_channels_out, num_heads)])
+        self.point2neighbor_list = nn.ModuleList([Point2NeighborAttention(k, x_or_f, f_or_d, q_input, q_output, k_input, k_output, v_input, v_output, ff_conv1_channel_in, ff_conv1_channel_out, ff_conv2_channel_in, ff_conv2_channel_out, heads)
+                                                  for k, x_or_f, f_or_d, q_input, q_output, k_input, k_output, v_input, v_output, ff_conv1_channel_in, ff_conv1_channel_out, ff_conv2_channel_in, ff_conv2_channel_out, heads
+                                                  in zip(K, xyz_or_feature, feature_or_diff, q_in, q_out, k_in, k_out, v_in, v_out, ff_conv1_channels_in, ff_conv1_channels_out, ff_conv2_channels_in, ff_conv2_channels_out, num_heads)])
 
     def forward(self, x):
         x_list = []
@@ -83,7 +87,8 @@ class Point2NeighborAttentionBlock(nn.Module):
 
 
 class Point2NeighborAttention(nn.Module):
-    def __init__(self, K=32, xyz_or_feature='feature', feature_or_diff='diff', qkv_channels=64,
+    def __init__(self, K=32, xyz_or_feature='feature', feature_or_diff='diff',
+                 q_in=64, q_out=64, k_in=64, k_out=64, v_in=64, v_out=64,
                  ff_conv1_channels_in=64, ff_conv1_channels_out=128,
                  ff_conv2_channels_in=128, ff_conv2_channels_out=64, num_heads=8):
 
@@ -92,42 +97,41 @@ class Point2NeighborAttention(nn.Module):
         self.xyz_or_feature = xyz_or_feature
         self.feature_or_diff = feature_or_diff
 
-        self.ca = CrossAttention(qkv_channels, ff_conv1_channels_in, ff_conv1_channels_out,
-                                 ff_conv2_channels_in, ff_conv2_channels_out, num_heads)
+        self.ca_reslink = CrossAttentionResLink(q_in, q_out, k_in, k_out, v_in, v_out, ff_conv1_channels_in, ff_conv1_channels_out, ff_conv2_channels_in, ff_conv2_channels_out, num_heads)
 
     def forward(self, x):
         xyz = x[...]  # TODO: xyz_or_feature='xyz' is not correct when you stack multiple Point2NeighborAttention
         # x.shape == (B, C, N)
         x, neighbors = ops.group(x, xyz, self.K, self.xyz_or_feature, self.feature_or_diff, cross_attention=True)
         # x.shape == (B, C, N, 1)    neighbors.shape == (B, C, N, K)
-        x = self.ca(x, neighbors)
+        x = self.ca_reslink(x, neighbors)
         # x.shape == (B, C, N)
         return x
 
 
 class CrossAttention(nn.Module):
-    def __init__(self, qkv_channels=64, ff_conv1_channels_in=64, ff_conv1_channels_out=128,
-                 ff_conv2_channels_in=128, ff_conv2_channels_out=64, num_heads=8):
+    def __init__(self, q_in=64, q_out=64, k_in=64, k_out=64, v_in=64, v_out=64, num_heads=8):
         super(CrossAttention, self).__init__()
-        self.num_heads = num_heads
-        if qkv_channels % num_heads != 0:
+        # check input values
+        if q_in != k_in or q_in != v_in or k_out != v_in:
+            raise ValueError('q_in, k_in and v_in should be the same!')
+        if q_out != k_out:
+            raise ValueError('q_out should be equal to k_out!')
+        if q_out % num_heads != 0 or k_out % num_heads != 0 or v_out % num_heads != 0:
             raise ValueError('please set another value for num_heads!')
-        else:
-            self.depth = int(qkv_channels / num_heads)
 
-        self.q_conv = nn.Conv2d(qkv_channels, qkv_channels, 1, bias=False)
-        self.k_conv = nn.Conv2d(qkv_channels, qkv_channels, 1, bias=False)
-        self.v_conv = nn.Conv2d(qkv_channels, qkv_channels, 1, bias=False)
+        self.num_heads = num_heads
+        self.q_depth = int(q_out / num_heads)
+        self.k_depth = int(k_out / num_heads)
+        self.v_depth = int(v_out / num_heads)
+
+        self.q_conv = nn.Conv2d(q_in, q_out, 1, bias=False)
+        self.k_conv = nn.Conv2d(k_in, k_out, 1, bias=False)
+        self.v_conv = nn.Conv2d(v_in, v_out, 1, bias=False)
         self.softmax = nn.Softmax(dim=-1)
 
-        self.ff = nn.Sequential(nn.Conv1d(ff_conv1_channels_in, ff_conv1_channels_out, 1, bias=False),
-                                nn.LeakyReLU(negative_slope=0.2),
-                                nn.Conv1d(ff_conv2_channels_in, ff_conv2_channels_out, 1, bias=False))
-        self.bn1 = nn.BatchNorm1d(qkv_channels)
-        self.bn2 = nn.BatchNorm1d(qkv_channels)
-
     def forward(self, x, neighbors):
-        # x.shape == (B, C, N, 1)
+        # x.shape == (B, C, N, 1)  neighbors.shape == (B, C, N, K)
         q = self.q_conv(x)
         # q.shape == (B, C, N, 1)
         q = self.split_heads(q)
@@ -147,15 +151,9 @@ class CrossAttention(nn.Module):
         scale_factor = math.sqrt(q.shape[-1])
         attention = self.softmax(energy / scale_factor)
         # attention.shape == (B, H, N, 1, K)
-        x_r = (attention @ v)[:, :, :, 0, :].permute(0, 2, 1, 3)
-        # x_r.shape == (B, N, H, D)
-        x_r = x_r.reshape(x_r.shape[0], x_r.shape[1], -1).permute(0, 2, 1)
-        # x_r.shape == (B, C, N)
-        x = self.bn1(x[:, :, :, 0] + x_r)
-        # x.shape == (B, C, N)
-        x_r = self.ff(x)
-        # x_r.shape == (B, C, N)
-        x = self.bn2(x + x_r)
+        x = (attention @ v)[:, :, :, 0, :].permute(0, 2, 1, 3)
+        # x.shape == (B, N, H, D)
+        x = x.reshape(x.shape[0], x.shape[1], -1).permute(0, 2, 1)
         # x.shape == (B, C, N)
         return x
 
@@ -166,6 +164,42 @@ class CrossAttention(nn.Module):
         x = x.permute(0, 1, 3, 4, 2)
         # x.shape == (B, H, N, K, D)
         return x
+
+
+class CrossAttentionResLink(nn.Module):
+    def __init__(self, q_in=64, q_out=64, k_in=64, k_out=64, v_in=64, v_out=64, ff_conv1_channels_in=64,
+                 ff_conv1_channels_out=128, ff_conv2_channels_in=128, ff_conv2_channels_out=64, num_heads=8):
+        super(CrossAttentionResLink, self).__init__()
+        # check input values
+        if v_in != v_out:
+            raise ValueError('v_in should be equal to v_out due to ResLink!')
+
+        self.ca = CrossAttention(q_in, q_out, k_in, k_out, v_in, v_out, num_heads)
+        self.ff = nn.Sequential(nn.Conv1d(ff_conv1_channels_in, ff_conv1_channels_out, 1, bias=False),
+                                nn.LeakyReLU(negative_slope=0.2),
+                                nn.Conv1d(ff_conv2_channels_in, ff_conv2_channels_out, 1, bias=False))
+        self.bn1 = nn.BatchNorm1d(v_out)
+        self.bn2 = nn.BatchNorm1d(v_out)
+        
+    def forward(self, x, neighbors):
+        # x.shape == (B, C, N, 1)  neighbors.shape == (B, C, N, K)
+        x_out = self.ca(x, neighbors)
+        # x1.shape == (B, C, N)
+        x = self.bn1(x[:, :, :, 0] + x_out)
+        # x.shape == (B, C, N)
+        x_out = self.ff(x)
+        # x_r.shape == (B, C, N)
+        x = self.bn2(x + x_out)
+        # x.shape == (B, C, N)
+        return x
+
+
+class CrossAttentionMS(nn.Module):
+    def __init__(self):
+        super(CrossAttentionMS, self).__init__()
+
+    def forward(self):
+        pass
 
 
 class Point2PointAttentionBlock(nn.Module):
@@ -245,9 +279,11 @@ class ConvBlock(nn.Module):
 
 
 class ShapeNetModel(nn.Module):
-    def __init__(self, embed_in, embed_out, p2neighbor_enable, p2neighbor_K, p2neighbor_x_or_f, p2neighbor_f_or_d, p2neighbor_qkv_channels,
-                 p2neighbor_num_heads, p2neighbor_ff_conv1_in, p2neighbor_ff_conv1_out, p2neighbor_ff_conv2_in,
-                 p2neighbor_ff_conv2_out, edgeconv_K, edgeconv_x_or_f, edgeconv_f_or_d, edgeconv_conv1_in, edgeconv_conv1_out,
+    def __init__(self, emb_q_in, emb_q_out, emb_k_in, emb_k_out, emb_v_in, emb_v_out, emb_num_heads,
+                 p2neighbor_enable, p2neighbor_K, p2neighbor_x_or_f, p2neighbor_f_or_d, p2neighbor_q_in,
+                 p2neighbor_q_out, p2neighbor_k_in, p2neighbor_k_out, p2neighbor_v_in, p2neighbor_v_out,
+                 p2neighbor_ff_conv1_in, p2neighbor_ff_conv1_out, p2neighbor_ff_conv2_in, p2neighbor_ff_conv2_out,
+                 p2neighbor_num_heads, edgeconv_K, edgeconv_x_or_f, edgeconv_f_or_d, edgeconv_conv1_in, edgeconv_conv1_out,
                  edgeconv_conv2_in, edgeconv_conv2_out, p2point_enable, p2point_use_embedding, p2point_embed_in, p2point_embed_out,
                  p2point_qkv_channels, p2point_ff_conv1_in, p2point_ff_conv1_out, p2point_ff_conv2_in, p2point_ff_conv2_out,
                  conv_block_channels_in, conv_block_channels_out):
@@ -256,9 +292,10 @@ class ShapeNetModel(nn.Module):
         self.p2neighbor_enable = p2neighbor_enable
 
         if p2neighbor_enable:
-            self.embedding = Embedding(embed_in, embed_out)
+            self.embedding = Point2NeighborEmbedding(emb_q_in, emb_q_out, emb_k_in, emb_k_out, emb_v_in, emb_v_out, emb_num_heads)
             self.point2neighbor_or_edgeconv = Point2NeighborAttentionBlock(p2neighbor_K, p2neighbor_x_or_f, p2neighbor_f_or_d,
-                                                                           p2neighbor_qkv_channels, p2neighbor_ff_conv1_in,
+                                                                           p2neighbor_q_in, p2neighbor_q_out, p2neighbor_k_in, p2neighbor_k_out,
+                                                                           p2neighbor_v_in, p2neighbor_v_out, p2neighbor_ff_conv1_in,
                                                                            p2neighbor_ff_conv1_out, p2neighbor_ff_conv2_in, p2neighbor_ff_conv2_out, p2neighbor_num_heads)
             x_cat_channels = sum(p2neighbor_ff_conv2_out)
         else:

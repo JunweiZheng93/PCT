@@ -98,12 +98,16 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
         validation_loader = test_loader
 
     # get model
-    my_model = shapenet_model.ShapeNetModel(config.embedding.embedding_channels_in, config.embedding.embedding_channels_out,
+    my_model = shapenet_model.ShapeNetModel(config.point2neighbor_embedding.q_in, config.point2neighbor_embedding.q_out,
+                                            config.point2neighbor_embedding.k_in, config.point2neighbor_embedding.k_out,
+                                            config.point2neighbor_embedding.v_in, config.point2neighbor_embedding.v_out, config.point2neighbor_embedding.num_heads,
                                             config.point2neighbor_block.enable, config.point2neighbor_block.point2neighbor.K,
                                             config.point2neighbor_block.point2neighbor.xyz_or_feature, config.point2neighbor_block.point2neighbor.feature_or_diff,
-                                            config.point2neighbor_block.point2neighbor.qkv_channels, config.point2neighbor_block.point2neighbor.num_heads, config.point2neighbor_block.point2neighbor.ff_conv1_channels_in,
+                                            config.point2neighbor_block.point2neighbor.q_in, config.point2neighbor_block.point2neighbor.q_out, config.point2neighbor_block.point2neighbor.k_in,
+                                            config.point2neighbor_block.point2neighbor.k_out, config.point2neighbor_block.point2neighbor.v_in,
+                                            config.point2neighbor_block.point2neighbor.v_out, config.point2neighbor_block.point2neighbor.ff_conv1_channels_in,
                                             config.point2neighbor_block.point2neighbor.ff_conv1_channels_out, config.point2neighbor_block.point2neighbor.ff_conv2_channels_in,
-                                            config.point2neighbor_block.point2neighbor.ff_conv2_channels_out, config.edgeconv_block.K, config.edgeconv_block.xyz_or_feature,
+                                            config.point2neighbor_block.point2neighbor.ff_conv2_channels_out, config.point2neighbor_block.point2neighbor.num_heads, config.edgeconv_block.K, config.edgeconv_block.xyz_or_feature,
                                             config.edgeconv_block.feature_or_diff, config.edgeconv_block.conv1_channel_in, config.edgeconv_block.conv1_channel_out,
                                             config.edgeconv_block.conv2_channel_in, config.edgeconv_block.conv2_channel_out, config.point2point_block.enable,
                                             config.point2point_block.use_embedding, config.point2point_block.embedding_channels_in, config.point2point_block.embedding_channels_out,
