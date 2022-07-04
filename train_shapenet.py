@@ -11,6 +11,7 @@ import os
 import torch.multiprocessing as mp
 import torch.distributed as dist
 from torch.cuda import amp
+import numpy as np
 
 
 @hydra.main(version_base=None, config_path="./configs", config_name="default.yaml")
@@ -144,16 +145,14 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
         loss_fn = torch.nn.CrossEntropyLoss(reduction='mean')
 
     val_miou_list = [0]
-    num_parts = torch.Tensor([4, 2, 2, 4, 4, 3, 3, 2, 4, 2, 6, 2, 3, 3, 3, 3]).to(device)
-    start_index = torch.Tensor([0, 4, 6, 8, 12, 16, 19, 22, 24, 28, 30, 36, 38, 41, 44, 47]).to(device)
-    num_parts.requires_grad = False
-    start_index.requires_grad = False
     # start training
     for epoch in range(config.train.epochs):
         my_model.train()
         train_sampler.set_epoch(epoch)
         train_loss_list = []
-        shape_ious_list = []
+        pred_list = []
+        seg_label_list = []
+        cls_label_list = []
         if rank == 0:
             kbar = pkbar.Kbar(target=len(train_loader), epoch=epoch, num_epochs=config.train.epochs, always_stateful=True)
         for i, (samples, seg_labels, cls_label) in enumerate(train_loader):
@@ -171,16 +170,24 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
                 train_loss = loss_fn(preds, seg_labels)
                 train_loss.backward()
                 optimizer.step()
-            shape_ious = metrics.calculate_shape_IoU(preds, seg_labels, cls_label, num_parts, start_index)
 
-            # collect the result among all gpus
-            torch.distributed.reduce(train_loss, dst=0)
-            torch.distributed.reduce(shape_ious, dst=0)
+            # collect the result from all gpus
+            pred_gather_list = [torch.empty_like(preds).to(device) for _ in range(config.train.ddp.nproc_this_node)]
+            seg_label_gather_list = [torch.empty_like(seg_labels).to(device) for _ in range(config.train.ddp.nproc_this_node)]
+            cls_label_gather_list = [torch.empty_like(cls_label).to(device) for _ in range(config.train.ddp.nproc_this_node)]
+            torch.distributed.all_gather(pred_gather_list, preds)
+            torch.distributed.all_gather(seg_label_gather_list, seg_labels)
+            torch.distributed.all_gather(cls_label_gather_list, cls_label)
+            torch.distributed.all_reduce(train_loss)
             if rank == 0:
+                preds = torch.concat(pred_gather_list, dim=0)
+                pred_list.append(torch.max(preds.permute(0, 2, 1), dim=2)[1].detach().cpu().numpy())
+                seg_labels = torch.concat(seg_label_gather_list, dim=0)
+                seg_label_list.append(torch.max(seg_labels.permute(0, 2, 1), dim=2)[1].detach().cpu().numpy())
+                cls_label = torch.concat(cls_label_gather_list, dim=0)
+                cls_label_list.append(torch.max(cls_label[:, :, 0], dim=1)[1].detach().cpu().numpy())
                 train_loss /= config.train.ddp.nproc_this_node
-                shape_ious /= config.train.ddp.nproc_this_node
-                train_loss_list.append(train_loss.detach())
-                shape_ious_list.append(shape_ious.detach())
+                train_loss_list.append(train_loss.detach().cpu().numpy())
                 kbar.update(i)
 
         # decay lr
@@ -190,8 +197,12 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
 
         # calculate metrics
         if rank == 0:
+            preds = np.concatenate(pred_list, axis=0)
+            seg_labels = np.concatenate(seg_label_list, axis=0)
+            cls_label = np.concatenate(cls_label_list, axis=0)
+            shape_ious = metrics.calculate_shape_IoU(preds, seg_labels, cls_label, config.datasets.mapping)
+            train_miou = sum(shape_ious) / len(shape_ious)
             train_loss = sum(train_loss_list) / len(train_loss_list)
-            train_miou = sum(shape_ious_list) / len(shape_ious_list)
 
         # log results
         if rank == 0:
@@ -205,27 +216,41 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
         if not (epoch+1) % config.train.validation_freq:
             my_model.eval()
             val_loss_list = []
-            shape_ious_list = []
+            pred_list = []
+            seg_label_list = []
+            cls_label_list = []
             with torch.no_grad():
                 for samples, seg_labels, cls_label in validation_loader:
                     samples, seg_labels, cls_label = samples.to(device), seg_labels.to(device), cls_label.to(device)
                     preds = my_model(samples, cls_label)
                     val_loss = loss_fn(preds, seg_labels)
-                    shape_ious = metrics.calculate_shape_IoU(preds, seg_labels, cls_label, num_parts, start_index)
 
                     # collect the result among all gpus
-                    torch.distributed.reduce(val_loss, dst=0)
-                    torch.distributed.reduce(shape_ious, dst=0)
+                    pred_gather_list = [torch.empty_like(preds).to(device) for _ in range(config.train.ddp.nproc_this_node)]
+                    seg_label_gather_list = [torch.empty_like(seg_labels).to(device) for _ in range(config.train.ddp.nproc_this_node)]
+                    cls_label_gather_list = [torch.empty_like(cls_label).to(device) for _ in range(config.train.ddp.nproc_this_node)]
+                    torch.distributed.all_gather(pred_gather_list, preds)
+                    torch.distributed.all_gather(seg_label_gather_list, seg_labels)
+                    torch.distributed.all_gather(cls_label_gather_list, cls_label)
+                    torch.distributed.all_reduce(val_loss)
                     if rank == 0:
+                        preds = torch.concat(pred_gather_list, dim=0)
+                        pred_list.append(torch.max(preds.permute(0, 2, 1), dim=2)[1].detach().cpu().numpy())
+                        seg_labels = torch.concat(seg_label_gather_list, dim=0)
+                        seg_label_list.append(torch.max(seg_labels.permute(0, 2, 1), dim=2)[1].detach().cpu().numpy())
+                        cls_label = torch.concat(cls_label_gather_list, dim=0)
+                        cls_label_list.append(torch.max(cls_label[:, :, 0], dim=1)[1].detach().cpu().numpy())
                         val_loss /= config.train.ddp.nproc_this_node
-                        shape_ious /= config.train.ddp.nproc_this_node
-                        val_loss_list.append(val_loss.detach())
-                        shape_ious_list.append(shape_ious.detach())
+                        val_loss_list.append(val_loss.detach().cpu().numpy())
 
             # calculate metrics
             if rank == 0:
+                preds = np.concatenate(pred_list, axis=0)
+                seg_labels = np.concatenate(seg_label_list, axis=0)
+                cls_label = np.concatenate(cls_label_list, axis=0)
+                shape_ious = metrics.calculate_shape_IoU(preds, seg_labels, cls_label, config.datasets.mapping)
+                val_miou = sum(shape_ious) / len(shape_ious)
                 val_loss = sum(val_loss_list) / len(val_loss_list)
-                val_miou = sum(shape_ious_list) / len(shape_ious_list)
 
             # log results
             if rank == 0:
