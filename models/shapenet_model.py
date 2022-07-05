@@ -52,8 +52,11 @@ class EdgeConv(nn.Module):
 
 
 class Point2NeighborEmbedding(nn.Module):
-    def __init__(self, q_in=3, q_out=64, k_in=3, k_out=64, v_in=3, v_out=64, num_heads=8):
+    def __init__(self, K=32, xyz_or_feature='feature', feature_or_diff='diff', q_in=3, q_out=64, k_in=3, k_out=64, v_in=3, v_out=64, num_heads=8):
         super(Point2NeighborEmbedding, self).__init__()
+        self.K = K
+        self.xyz_or_feature = xyz_or_feature
+        self.feature_or_diff = feature_or_diff
         self.embedding = CrossAttention(q_in, q_out, k_in, k_out, v_in, v_out, num_heads)
 
     def forward(self, x):
@@ -113,8 +116,8 @@ class CrossAttention(nn.Module):
     def __init__(self, q_in=64, q_out=64, k_in=64, k_out=64, v_in=64, v_out=64, num_heads=8):
         super(CrossAttention, self).__init__()
         # check input values
-        if q_in != k_in or q_in != v_in or k_out != v_in:
-            raise ValueError('q_in, k_in and v_in should be the same!')
+        if q_in != k_in or q_in != v_in or k_in != v_in:
+            raise ValueError(f'q_in, k_in and v_in should be the same! Got q_in:{q_in}, k_in:{k_in}, v_in:{v_in}')
         if q_out != k_out:
             raise ValueError('q_out should be equal to k_out!')
         if q_out % num_heads != 0 or k_out % num_heads != 0 or v_out % num_heads != 0:
@@ -134,15 +137,15 @@ class CrossAttention(nn.Module):
         # x.shape == (B, C, N, 1)  neighbors.shape == (B, C, N, K)
         q = self.q_conv(x)
         # q.shape == (B, C, N, 1)
-        q = self.split_heads(q)
+        q = self.split_heads(q, self.num_heads, self.q_depth)
         # q.shape == (B, H, N, 1, D)
         k = self.k_conv(neighbors)
         # k.shape ==  (B, C, N, K)
-        k = self.split_heads(k)
+        k = self.split_heads(k, self.num_heads, self.k_depth)
         # k.shape == (B, H, N, k, D)
         v = self.v_conv(neighbors)
         # v.shape ==  (B, C, N, K)
-        v = self.split_heads(v)
+        v = self.split_heads(v, self.num_heads, self.v_depth)
         # v.shape == (B, H, N, k, D)
         k = k.permute(0, 1, 2, 4, 3)
         # k.shape == (B, H, N, D, K)
@@ -157,9 +160,9 @@ class CrossAttention(nn.Module):
         # x.shape == (B, C, N)
         return x
 
-    def split_heads(self, x):
+    def split_heads(self, x, heads, depth):
         # x.shape == (B, C, N, K)
-        x = x.view(x.shape[0], self.num_heads, self.depth, x.shape[2], x.shape[3])
+        x = x.view(x.shape[0], heads, depth, x.shape[2], x.shape[3])
         # x.shape == (B, H, D, N, K)
         x = x.permute(0, 1, 3, 4, 2)
         # x.shape == (B, H, N, K, D)
@@ -279,7 +282,7 @@ class ConvBlock(nn.Module):
 
 
 class ShapeNetModel(nn.Module):
-    def __init__(self, emb_q_in, emb_q_out, emb_k_in, emb_k_out, emb_v_in, emb_v_out, emb_num_heads,
+    def __init__(self, emb_K, emb_xyz_or_feature, emb_feature_or_diff, emb_q_in, emb_q_out, emb_k_in, emb_k_out, emb_v_in, emb_v_out, emb_num_heads,
                  p2neighbor_enable, p2neighbor_K, p2neighbor_x_or_f, p2neighbor_f_or_d, p2neighbor_q_in,
                  p2neighbor_q_out, p2neighbor_k_in, p2neighbor_k_out, p2neighbor_v_in, p2neighbor_v_out, p2neighbor_num_heads,
                  p2neighbor_ff_conv1_in, p2neighbor_ff_conv1_out, p2neighbor_ff_conv2_in, p2neighbor_ff_conv2_out,
@@ -292,7 +295,7 @@ class ShapeNetModel(nn.Module):
         self.p2neighbor_enable = p2neighbor_enable
 
         if p2neighbor_enable:
-            self.embedding = Point2NeighborEmbedding(emb_q_in, emb_q_out, emb_k_in, emb_k_out, emb_v_in, emb_v_out, emb_num_heads)
+            self.embedding = Point2NeighborEmbedding(emb_K, emb_xyz_or_feature, emb_feature_or_diff, emb_q_in, emb_q_out, emb_k_in, emb_k_out, emb_v_in, emb_v_out, emb_num_heads)
             self.point2neighbor_or_edgeconv = Point2NeighborAttentionBlock(p2neighbor_K, p2neighbor_x_or_f, p2neighbor_f_or_d,
                                                                            p2neighbor_q_in, p2neighbor_q_out, p2neighbor_k_in, p2neighbor_k_out,
                                                                            p2neighbor_v_in, p2neighbor_v_out, p2neighbor_num_heads, p2neighbor_ff_conv1_in,

@@ -80,6 +80,9 @@ edgeconv_block:
   conv2_channel_out: [64, 64, 64]
 
 point2neighbor_embedding:
+  K: 32  # 3 values in the list means point2neighbor_block includes 3 point2neighbor layers. The 'K' for each layer is 32, 32 and 32 respectively
+  xyz_or_feature: feature  # select K neighbors according to xyz or current feature
+  feature_or_diff: diff  # use the features of K neighbors or use the difference between the given point and its K neighbors as cross attention input
   q_in: 3
   q_out: 32
   k_in: 3

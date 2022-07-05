@@ -98,7 +98,8 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
         validation_loader = test_loader
 
     # get model
-    my_model = shapenet_model.ShapeNetModel(config.point2neighbor_embedding.q_in, config.point2neighbor_embedding.q_out,
+    my_model = shapenet_model.ShapeNetModel(config.point2neighbor_embedding.K, config.point2neighbor_embedding.xyz_or_feature, config.point2neighbor_embedding.feature_or_diff,
+                                            config.point2neighbor_embedding.q_in, config.point2neighbor_embedding.q_out,
                                             config.point2neighbor_embedding.k_in, config.point2neighbor_embedding.k_out,
                                             config.point2neighbor_embedding.v_in, config.point2neighbor_embedding.v_out, config.point2neighbor_embedding.num_heads,
                                             config.point2neighbor_block.enable, config.point2neighbor_block.point2neighbor.K,
