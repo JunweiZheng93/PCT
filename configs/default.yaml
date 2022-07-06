@@ -78,6 +78,7 @@ edgeconv_block:
   conv1_channel_out: [64, 64, 64]
   conv2_channel_in: [64, 64, 64]
   conv2_channel_out: [64, 64, 64]
+  pooling: ['max', 'max', 'max']
 
 embedding:
   which_embedding: edgeconv  # p2p, p2n, linear or edgeconv
@@ -111,6 +112,7 @@ embedding:
     conv1_out: 64
     conv2_in: 64
     conv2_out: 64
+    pooling: max
 
 point2neighbor_block:
   enable: false  # if false, edgeconv block will be used

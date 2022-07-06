@@ -6,11 +6,11 @@ import math
 
 class EdgeConvBlock(nn.Module):
     def __init__(self, K=(32, 32, 32), xyz_or_feature=('feature', 'feature', 'feature'), feature_or_diff=('diff', 'diff', 'diff'),
-                 conv1_channel_in=(3*2, 64*2, 64*2), conv1_channel_out=(64, 64, 64), conv2_channel_in=(64, 64, 64), conv2_channel_out=(64, 64, 64)):
+                 conv1_channel_in=(3*2, 64*2, 64*2), conv1_channel_out=(64, 64, 64), conv2_channel_in=(64, 64, 64), conv2_channel_out=(64, 64, 64), pooling=('max', 'max', 'max')):
         super(EdgeConvBlock, self).__init__()
-        self.edgeconv_list = nn.ModuleList([EdgeConv(k, x_or_f, f_or_d, conv1_in, conv1_out, conv2_in, conv2_out)
-                                            for k, x_or_f, f_or_d, conv1_in, conv1_out, conv2_in, conv2_out
-                                            in zip(K, xyz_or_feature, feature_or_diff, conv1_channel_in, conv1_channel_out, conv2_channel_in, conv2_channel_out)])
+        self.edgeconv_list = nn.ModuleList([EdgeConv(k, x_or_f, f_or_d, conv1_in, conv1_out, conv2_in, conv2_out, pool)
+                                            for k, x_or_f, f_or_d, conv1_in, conv1_out, conv2_in, conv2_out, pool
+                                            in zip(K, xyz_or_feature, feature_or_diff, conv1_channel_in, conv1_channel_out, conv2_channel_in, conv2_channel_out, pooling)])
 
     def forward(self, x):
         x_list = []
@@ -23,12 +23,13 @@ class EdgeConvBlock(nn.Module):
 
 class EdgeConv(nn.Module):
     def __init__(self, K=32, xyz_or_feature='feature', feature_or_diff='diff',
-                 conv1_channel_in=6, conv1_channel_out=64, conv2_channel_in=64, conv2_channel_out=64):
+                 conv1_channel_in=6, conv1_channel_out=64, conv2_channel_in=64, conv2_channel_out=64, pooling='max'):
 
         super(EdgeConv, self).__init__()
         self.K = K
         self.xyz_or_feature = xyz_or_feature
         self.feature_or_diff = feature_or_diff
+        self.pooling = pooling
 
         self.conv1 = nn.Sequential(nn.Conv2d(conv1_channel_in, conv1_channel_out, kernel_size=1, bias=False),
                                    nn.BatchNorm2d(conv1_channel_out),
@@ -46,7 +47,12 @@ class EdgeConv(nn.Module):
         # x.shape == (B, C, N, K)
         x = self.conv2(x)
         # x.shape == (B, C, N, K)
-        x = x.max(dim=-1, keepdim=False)[0]
+        if self.pooling == 'max':
+            x = x.max(dim=-1, keepdim=False)[0]
+        elif self.pooling == 'average':
+            x = x.mean(dim=-1, keepdim=False)
+        else:
+            raise ValueError('pooling should be max or average')
         # x.shape == (B, C, N)
         return x
 
@@ -369,12 +375,12 @@ class ShapeNetModel(nn.Module):
                  p2n_emb_q_in, p2n_emb_q_out, p2n_emb_k_in, p2n_emb_k_out, p2n_emb_v_in, p2n_emb_v_out, p2n_emb_num_heads,
                  p2p_emb_q_in, p2p_emb_q_out, p2p_emb_k_in, p2p_emb_k_out, p2p_emb_v_in, p2p_emb_v_out, p2p_emb_num_heads,
                  egdeconv_emb_K, egdeconv_emb_xyz_or_feature, egdeconv_emb_feature_or_diff, egdeconv_emb_conv1_in,
-                 egdeconv_emb_conv1_out, egdeconv_emb_conv2_in, egdeconv_emb_conv2_out,
+                 egdeconv_emb_conv1_out, egdeconv_emb_conv2_in, egdeconv_emb_conv2_out, edgeconv_emb_pooling,
                  p2neighbor_enable, p2neighbor_K, p2neighbor_x_or_f, p2neighbor_f_or_d, p2neighbor_q_in,
                  p2neighbor_q_out, p2neighbor_k_in, p2neighbor_k_out, p2neighbor_v_in, p2neighbor_v_out, p2neighbor_num_heads,
                  p2neighbor_ff_conv1_in, p2neighbor_ff_conv1_out, p2neighbor_ff_conv2_in, p2neighbor_ff_conv2_out,
                  edgeconv_K, edgeconv_x_or_f, edgeconv_f_or_d, edgeconv_conv1_in, edgeconv_conv1_out,
-                 edgeconv_conv2_in, edgeconv_conv2_out, p2point_enable, p2point_use_embedding, p2point_embed_in, p2point_embed_out,
+                 edgeconv_conv2_in, edgeconv_conv2_out, edgeconv_pooling, p2point_enable, p2point_use_embedding, p2point_embed_in, p2point_embed_out,
                  p2point_qkv_channels, p2point_ff_conv1_in, p2point_ff_conv1_out, p2point_ff_conv2_in, p2point_ff_conv2_out,
                  conv_block_channels_in, conv_block_channels_out):
 
@@ -389,7 +395,7 @@ class ShapeNetModel(nn.Module):
             elif which_emb == 'p2p':
                 self.embedding = Point2PointEmbedding(p2p_emb_q_in, p2p_emb_q_out, p2p_emb_k_in, p2p_emb_k_out, p2p_emb_v_in, p2p_emb_v_out, p2p_emb_num_heads)
             elif which_emb == 'edgeconv':
-                self.embedding = EdgeConv(egdeconv_emb_K, egdeconv_emb_xyz_or_feature, egdeconv_emb_feature_or_diff, egdeconv_emb_conv1_in, egdeconv_emb_conv1_out, egdeconv_emb_conv2_in, egdeconv_emb_conv2_out)
+                self.embedding = EdgeConv(egdeconv_emb_K, egdeconv_emb_xyz_or_feature, egdeconv_emb_feature_or_diff, egdeconv_emb_conv1_in, egdeconv_emb_conv1_out, egdeconv_emb_conv2_in, egdeconv_emb_conv2_out, edgeconv_emb_pooling)
             else:
                 raise ValueError(f'which_emb should be linear, p2n or p2p. Got {which_emb}')
             self.point2neighbor_or_edgeconv = Point2NeighborAttentionBlock(p2neighbor_K, p2neighbor_x_or_f, p2neighbor_f_or_d,
@@ -398,7 +404,7 @@ class ShapeNetModel(nn.Module):
                                                                            p2neighbor_ff_conv1_out, p2neighbor_ff_conv2_in, p2neighbor_ff_conv2_out)
             x_cat_channels = sum(p2neighbor_ff_conv2_out)
         else:
-            self.point2neighbor_or_edgeconv = EdgeConvBlock(edgeconv_K, edgeconv_x_or_f, edgeconv_f_or_d, edgeconv_conv1_in, edgeconv_conv1_out, edgeconv_conv2_in, edgeconv_conv2_out)
+            self.point2neighbor_or_edgeconv = EdgeConvBlock(edgeconv_K, edgeconv_x_or_f, edgeconv_f_or_d, edgeconv_conv1_in, edgeconv_conv1_out, edgeconv_conv2_in, edgeconv_conv2_out, edgeconv_pooling)
             x_cat_channels = sum(edgeconv_conv2_out)
 
         if p2point_enable:
