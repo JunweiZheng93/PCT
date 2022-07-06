@@ -1,24 +1,11 @@
 import torch
 
 
-def square_distance(src, dst):
-    """
-    Input:
-        src: source points, [B, M, C]
-        dst: target points, [B, N, C]
-    Output:
-        dist: point-wise square distance, [B, M, N]
-    """
-    return torch.sum((src[:, :, None, :] - dst[:, None, :, :]) ** 2, dim=-1)
-
-
 def index_points(points, idx):
     """
-    Input:
-        points: input points data, [B, N, C]
-        idx: sample index data, [B, M, K]
-    Return:
-        new_points: indexed points data, [B, M, K, C]
+    :param points: points.shape == (B, N, C)
+    :param idx: idx.shape == (B, N, K)
+    :return:indexed_points.shape == (B, N, K, C)
     """
     raw_shape = idx.shape
     idx = idx.reshape(raw_shape[0], -1)
@@ -26,44 +13,56 @@ def index_points(points, idx):
     return res.view(*raw_shape, -1)
 
 
-def knn(x, k):
-    x = x.permute(0, 2, 1)
-    inner = -2 * torch.matmul(x.transpose(2, 1), x)
-    xx = torch.sum(x ** 2, dim=1, keepdim=True)
-    pairwise_distance = -xx - inner - xx.transpose(2, 1)
-
+def knn(a, b, k):
+    """
+    :param a: a.shape == (B, N, C), where N >= M
+    :param b: b.shape == (B, M, C), where N >= M
+    :param k: int
+    """
+    inner = -2 * torch.matmul(a, b.transpose(2, 1))  # inner.shape == (B, N, M)
+    aa = torch.sum(a**2, dim=2, keepdim=True)  # aa.shape == (B, N, 1)
+    bb = torch.sum(b**2, dim=2, keepdim=True)  # bb.shape == (B, M, 1)
+    pairwise_distance = -aa - inner - bb.transpose(2, 1)  # pairwise_distance.shape == (B, N, M)
     idx = pairwise_distance.topk(k=k, dim=-1)[1]  # idx.shape == (B, N, K)
     return idx
 
 
-def group(pcd, xyz, K, xyz_or_feature, feature_or_diff, cross_attention):
-    pcd_clone = pcd[..., None]  # pcd_clone.shape == (B, C, N, 1)
+def select_neighbors(pcd, coordinate, K, neighbor_selection_method, neighbor_type):
     pcd = pcd.permute(0, 2, 1)  # pcd.shape == (B, N, C)
-    xyz = xyz.permute(0, 2, 1)  # xyz.shape == (B, N, C)
+    coordinate = coordinate.permute(0, 2, 1)  # coordinate.shape == (B, N, C)
 
-    # if xyz_or_feature == 'xyz':
-    #     dists = square_distance(xyz, xyz)  # dists.shape == (B, N, N)
-    # elif xyz_or_feature == 'feature':
-    #     dists = square_distance(pcd, pcd)  # dists.shape == (B, N, N)
-    # else:
-    #     raise ValueError(f'xyz_or_feature should be "xyz" or "feature", but got {xyz_or_feature}')
-
-    # idx = dists.argsort()[:, :, :K]  # idx.shape == (B, N, K)
-
-    idx = knn(pcd, K)  # idx.shape == (B, N, K)
+    if neighbor_selection_method == 'coordinate':
+        idx = knn(coordinate, coordinate, K)  # idx.shape == (B, N, K)
+    elif neighbor_selection_method == 'activation':
+        idx = knn(pcd, pcd, K)  # idx.shape == (B, N, K)
+    else:
+        raise ValueError(f'neighbor_selection_method should be coordinate or activation, but got {neighbor_selection_method}')
     neighbors = index_points(pcd, idx)  # neighbors.shape == (B, N, K, C)
 
-    if feature_or_diff == 'feature':
-        pcd = torch.cat([neighbors, pcd[:, :, None, :].repeat(1, 1, K, 1)], dim=-1).permute(0, 3, 1, 2)  # pcd.shape == (B, 2C, N, K)
-        neighbors = neighbors.permute(0, 3, 1, 2)  # neighbors.shape == (B, C, N, K)
-    elif feature_or_diff == 'diff':
+    if neighbor_type == 'neighbor':
+        neighbors = neighbors.permute(0, 3, 1, 2)  # output.shape == (B, C, N, K)
+    elif neighbor_type == 'diff':
         diff = neighbors - pcd[:, :, None, :]  # diff.shape == (B, N, K, C)
-        pcd = torch.cat([diff, pcd[:, :, None, :].repeat(1, 1, K, 1)], dim=-1).permute(0, 3, 1, 2)  # pcd.shape == (B, 2C, N, K)
-        neighbors = diff.permute(0, 3, 1, 2)  # diff.shape == (B, C, N, K)
+        neighbors = diff.permute(0, 3, 1, 2)  # output.shape == (B, C, N, K)
     else:
-        raise ValueError(f'feature_or_diff should be "feature" or "diff", but got {feature_or_diff}')
+        raise ValueError(f'neighbor_type should be "neighbor" or "diff", but got {neighbor_type}')
 
-    # the group function is used for cross attention input or edgeconv input
-    if cross_attention:
-        pcd = pcd_clone  # pcd.shape == (B, C, N, 1)
-    return pcd, neighbors
+    return neighbors
+
+
+def group(pcd, coordinate, K, neighbor_selection_method, group_type):
+    if group_type == 'neighbor':
+        neighbors = select_neighbors(pcd, coordinate, K, neighbor_selection_method, 'neighbor')  # neighbors.shape == (B, C, N, K)
+        output = neighbors  # output.shape == (B, C, N, K)
+    elif group_type == 'diff':
+        diff = select_neighbors(pcd, coordinate, K, neighbor_selection_method, 'diff')  # diff.shape == (B, C, N, K)
+        output = diff  # output.shape == (B, C, N, K)
+    elif group_type == 'center_neighbor':
+        neighbors = select_neighbors(pcd, coordinate, K, neighbor_selection_method, 'neighbor')   # neighbors.shape == (B, C, N, K)
+        output = torch.cat([pcd[:, :, :, None].repeat(1, 1, 1, K), neighbors], dim=1)  # output.shape == (B, 2C, N, K)
+    elif group_type == 'center_diff':
+        diff = select_neighbors(pcd, coordinate, K, neighbor_selection_method, 'diff')  # diff.shape == (B, C, N, K)
+        output = torch.cat([pcd[:, :, :, None].repeat(1, 1, 1, K), diff], dim=1)  # output.shape == (B, 2C, N, K)
+    else:
+        raise ValueError(f'group_type should be neighbor, diff, center_neighbor or center_diff, but got {group_type}')
+    return output

@@ -71,9 +71,9 @@ test:  # only valid when running the test script
     prefetch: ${test.dataloader.batch_size}  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
 
 edgeconv_block:
-  K: [32, 32, 32]
-  xyz_or_feature: ['feature', 'feature', 'feature']  # select K neighbors according to xyz or current feature
-  feature_or_diff: ['diff', 'diff', 'diff']  # use the features of K neighbors or use the difference between the given point and its K neighbors as cross attention input
+  K: [40, 40, 40]
+  neighbor_selection_method: ['activation', 'activation', 'activation']  # coordinate or activation
+  group_type: ['center_diff', 'center_diff', 'center_diff']  # neighbor, diff, center_neighbor or center_diff
   conv1_channel_in: [6, 128, 128]
   conv1_channel_out: [64, 64, 64]
   conv2_channel_in: [64, 64, 64]
@@ -86,9 +86,9 @@ embedding:
     emb_in: 3
     emb_out: 64
   point2neighbor_embedding:
-    K: 32  # 3 values in the list means point2neighbor_block includes 3 point2neighbor layers. The 'K' for each layer is 32, 32 and 32 respectively
-    xyz_or_feature: feature  # select K neighbors according to xyz or current feature
-    feature_or_diff: diff  # use the features of K neighbors or use the difference between the given point and its K neighbors as cross attention input
+    K: 40
+    neighbor_selection_method: coordinate  # coordinate or activation
+    group_type: diff  # diff, neighbor, center_neighbor or center_diff
     q_in: 3
     q_out: 32
     k_in: 3
@@ -105,9 +105,9 @@ embedding:
     v_out: 64
     num_heads: 8
   edgeconv_embedding:
-    K: 32
-    xyz_or_feature: feature
-    feature_or_diff: diff
+    K: 40
+    neighbor_selection_method: coordinate  # coordinate or activation
+    group_type: center_diff  # neighbor, diff, center_neighbor or center_diff
     conv1_in: 6
     conv1_out: 64
     conv2_in: 64
@@ -117,9 +117,9 @@ embedding:
 point2neighbor_block:
   enable: false  # if false, edgeconv block will be used
   point2neighbor:
-    K: [32, 32, 32]  # 3 values in the list means point2neighbor_block includes 3 point2neighbor layers. The 'K' for each layer is 32, 32 and 32 respectively
-    xyz_or_feature: ['feature', 'feature', 'feature']  # select K neighbors according to xyz or current feature
-    feature_or_diff: ['diff', 'diff', 'diff']  # use the features of K neighbors or use the difference between the given point and its K neighbors as cross attention input
+    K: [40, 40, 40]  # 3 values in the list means point2neighbor_block includes 3 point2neighbor layers. The 'K' for each layer is 40, 40 and 40 respectively
+    neighbor_selection_method: ['activation', 'activation', 'activation']  # coordinate or activation
+    group_type: ['diff', 'diff', 'diff']  # diff, neighbor, center_neighbor or center_diff
     q_in: [64, 64, 64]
     q_out: [64, 64, 64]
     k_in: [64, 64, 64]
