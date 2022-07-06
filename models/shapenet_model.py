@@ -51,6 +51,36 @@ class EdgeConv(nn.Module):
         return x
 
 
+class LinearEmbedding(nn.Module):
+    def __init__(self, emb_in, emb_out):
+        super(LinearEmbedding, self).__init__()
+        self.embedding = nn.Conv1d(emb_in, emb_out, 1, bias=False)
+
+    def forward(self, x):
+        # x.shape == (B, C, N)
+        x = self.embedding(x)
+        # x.shape == (B, C, N)
+        return x
+
+
+class Point2PointEmbedding(nn.Module):
+    def __init__(self, q_in, q_out, k_in, k_out, v_in, v_out, num_heads):
+        super(Point2PointEmbedding, self).__init__()
+        self.sa = SelfAttention(q_in, q_out, k_in, k_out, v_in, v_out, num_heads)
+
+    def forward(self, x):
+        # x.shape == (B, C, N)
+        _, _, N = x.shape
+        # x.shape == (B, C, N)
+        x = self.sa(x)
+        # x.shape == (B, C, N)
+        # x = torch.mean(x, dim=2, keepdim=True)
+        # x.shape == (B, C, 1)
+        # x = x.repeat(1, 1, N)
+        # x.shape == (B, C, N)
+        return x
+
+
 class Point2NeighborEmbedding(nn.Module):
     def __init__(self, K=32, xyz_or_feature='feature', feature_or_diff='diff', q_in=3, q_out=64, k_in=3, k_out=64, v_in=3, v_out=64, num_heads=8):
         super(Point2NeighborEmbedding, self).__init__()
@@ -269,6 +299,59 @@ class Point2PointAttention(nn.Module):
         return x
 
 
+class SelfAttention(nn.Module):
+    def __init__(self, q_in, q_out, k_in, k_out, v_in, v_out, num_heads):
+        super(SelfAttention, self).__init__()
+        # check input values
+        if q_in != k_in or q_in != v_in or k_in != v_in:
+            raise ValueError(f'q_in, k_in and v_in should be the same! Got q_in:{q_in}, k_in:{k_in}, v_in:{v_in}')
+        if q_out != k_out:
+            raise ValueError('q_out should be equal to k_out!')
+        if q_out % num_heads != 0 or k_out % num_heads != 0 or v_out % num_heads != 0:
+            raise ValueError('please set another value for num_heads!')
+
+        self.num_heads = num_heads
+        self.q_depth = int(q_out / num_heads)
+        self.k_depth = int(k_out / num_heads)
+        self.v_depth = int(v_out / num_heads)
+
+        self.q_conv = nn.Conv1d(q_in, q_out, 1, bias=False)
+        self.k_conv = nn.Conv1d(k_in, k_out, 1, bias=False)
+        self.v_conv = nn.Conv1d(v_in, v_out, 1, bias=False)
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, x):
+        # x.shape == (B, C, N)
+        q = self.q_conv(x)
+        # q.shape == (B, C, N)
+        q = self.split_heads(q, self.num_heads, self.q_depth)
+        # q.shape == (B, H, D, N)
+        k = self.k_conv(x)
+        # k.shape ==  (B, C, N)
+        k = self.split_heads(k, self.num_heads, self.k_depth)
+        # k.shape == (B, H, D, N)
+        v = self.v_conv(x)
+        # v.shape ==  (B, C, N)
+        v = self.split_heads(v, self.num_heads, self.v_depth)
+        # v.shape == (B, H, D, N)
+        energy = q.permute(0, 1, 3, 2) @ k
+        # energy.shape == (B, H, N, N)
+        scale_factor = math.sqrt(x.shape[-1])
+        attention = self.softmax(energy / scale_factor)
+        # attention.shape == (B, H, N, N)
+        x = (attention @ v.permute(0, 1, 3, 2)).permute(0, 2, 1, 3)
+        # x.shape == (B, N, H, D)
+        x = x.reshape(x.shape[0], x.shape[1], -1).permute(0, 2, 1)
+        # x.shape == (B, C, N)
+        return x
+
+    def split_heads(self, x, heads, depth):
+        # x.shape == (B, C, N)
+        x = x.view(x.shape[0], heads, depth, x.shape[2])
+        # x.shape == (B, H, D, N)
+        return x
+
+
 class ConvBlock(nn.Module):
     def __init__(self, channels_in=(64*3,), channels_out=(1024,)):
         super(ConvBlock, self).__init__()
@@ -282,7 +365,11 @@ class ConvBlock(nn.Module):
 
 
 class ShapeNetModel(nn.Module):
-    def __init__(self, emb_K, emb_xyz_or_feature, emb_feature_or_diff, emb_q_in, emb_q_out, emb_k_in, emb_k_out, emb_v_in, emb_v_out, emb_num_heads,
+    def __init__(self, which_emb, linear_emb_in, linear_emb_out, p2n_emb_K, p2n_emb_xyz_or_feature, p2n_emb_feature_or_diff,
+                 p2n_emb_q_in, p2n_emb_q_out, p2n_emb_k_in, p2n_emb_k_out, p2n_emb_v_in, p2n_emb_v_out, p2n_emb_num_heads,
+                 p2p_emb_q_in, p2p_emb_q_out, p2p_emb_k_in, p2p_emb_k_out, p2p_emb_v_in, p2p_emb_v_out, p2p_emb_num_heads,
+                 egdeconv_emb_K, egdeconv_emb_xyz_or_feature, egdeconv_emb_feature_or_diff, egdeconv_emb_conv1_in,
+                 egdeconv_emb_conv1_out, egdeconv_emb_conv2_in, egdeconv_emb_conv2_out,
                  p2neighbor_enable, p2neighbor_K, p2neighbor_x_or_f, p2neighbor_f_or_d, p2neighbor_q_in,
                  p2neighbor_q_out, p2neighbor_k_in, p2neighbor_k_out, p2neighbor_v_in, p2neighbor_v_out, p2neighbor_num_heads,
                  p2neighbor_ff_conv1_in, p2neighbor_ff_conv1_out, p2neighbor_ff_conv2_in, p2neighbor_ff_conv2_out,
@@ -295,7 +382,16 @@ class ShapeNetModel(nn.Module):
         self.p2neighbor_enable = p2neighbor_enable
 
         if p2neighbor_enable:
-            self.embedding = Point2NeighborEmbedding(emb_K, emb_xyz_or_feature, emb_feature_or_diff, emb_q_in, emb_q_out, emb_k_in, emb_k_out, emb_v_in, emb_v_out, emb_num_heads)
+            if which_emb == 'linear':
+                self.embedding = LinearEmbedding(linear_emb_in, linear_emb_out)
+            elif which_emb == 'p2n':
+                self.embedding = Point2NeighborEmbedding(p2n_emb_K, p2n_emb_xyz_or_feature, p2n_emb_feature_or_diff, p2n_emb_q_in, p2n_emb_q_out, p2n_emb_k_in, p2n_emb_k_out, p2n_emb_v_in, p2n_emb_v_out, p2n_emb_num_heads)
+            elif which_emb == 'p2p':
+                self.embedding = Point2PointEmbedding(p2p_emb_q_in, p2p_emb_q_out, p2p_emb_k_in, p2p_emb_k_out, p2p_emb_v_in, p2p_emb_v_out, p2p_emb_num_heads)
+            elif which_emb == 'edgeconv':
+                self.embedding = EdgeConv(egdeconv_emb_K, egdeconv_emb_xyz_or_feature, egdeconv_emb_feature_or_diff, egdeconv_emb_conv1_in, egdeconv_emb_conv1_out, egdeconv_emb_conv2_in, egdeconv_emb_conv2_out)
+            else:
+                raise ValueError(f'which_emb should be linear, p2n or p2p. Got {which_emb}')
             self.point2neighbor_or_edgeconv = Point2NeighborAttentionBlock(p2neighbor_K, p2neighbor_x_or_f, p2neighbor_f_or_d,
                                                                            p2neighbor_q_in, p2neighbor_q_out, p2neighbor_k_in, p2neighbor_k_out,
                                                                            p2neighbor_v_in, p2neighbor_v_out, p2neighbor_num_heads, p2neighbor_ff_conv1_in,

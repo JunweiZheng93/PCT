@@ -98,10 +98,17 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
         validation_loader = test_loader
 
     # get model
-    my_model = shapenet_model.ShapeNetModel(config.point2neighbor_embedding.K, config.point2neighbor_embedding.xyz_or_feature, config.point2neighbor_embedding.feature_or_diff,
-                                            config.point2neighbor_embedding.q_in, config.point2neighbor_embedding.q_out,
-                                            config.point2neighbor_embedding.k_in, config.point2neighbor_embedding.k_out,
-                                            config.point2neighbor_embedding.v_in, config.point2neighbor_embedding.v_out, config.point2neighbor_embedding.num_heads,
+    my_model = shapenet_model.ShapeNetModel(config.embedding.which_embedding, config.embedding.linear.emb_in, config.embedding.linear.emb_out,
+                                            config.embedding.point2neighbor_embedding.K, config.embedding.point2neighbor_embedding.xyz_or_feature, config.embedding.point2neighbor_embedding.feature_or_diff,
+                                            config.embedding.point2neighbor_embedding.q_in, config.embedding.point2neighbor_embedding.q_out,
+                                            config.embedding.point2neighbor_embedding.k_in, config.embedding.point2neighbor_embedding.k_out,
+                                            config.embedding.point2neighbor_embedding.v_in, config.embedding.point2neighbor_embedding.v_out, config.embedding.point2neighbor_embedding.num_heads,
+                                            config.embedding.point2point_embedding.q_in, config.embedding.point2point_embedding.q_out,
+                                            config.embedding.point2point_embedding.k_in, config.embedding.point2point_embedding.k_out,
+                                            config.embedding.point2point_embedding.v_in, config.embedding.point2point_embedding.v_out, config.embedding.point2point_embedding.num_heads,
+                                            config.embedding.edgeconv_embedding.K, config.embedding.edgeconv_embedding.xyz_or_feature, config.embedding.edgeconv_embedding.feature_or_diff,
+                                            config.embedding.edgeconv_embedding.conv1_in, config.embedding.edgeconv_embedding.conv1_out,
+                                            config.embedding.edgeconv_embedding.conv2_in, config.embedding.edgeconv_embedding.conv2_out,
                                             config.point2neighbor_block.enable, config.point2neighbor_block.point2neighbor.K,
                                             config.point2neighbor_block.point2neighbor.xyz_or_feature, config.point2neighbor_block.point2neighbor.feature_or_diff,
                                             config.point2neighbor_block.point2neighbor.q_in, config.point2neighbor_block.point2neighbor.q_out, config.point2neighbor_block.point2neighbor.k_in,
