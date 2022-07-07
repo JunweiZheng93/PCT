@@ -27,17 +27,18 @@ def knn(a, b, k):
     return idx
 
 
-def select_neighbors(pcd, coordinate, K, neighbor_selection_method, neighbor_type):
+def select_neighbors(pcd, coordinate, K, scale, neighbor_selection_method, neighbor_type):
     pcd = pcd.permute(0, 2, 1)  # pcd.shape == (B, N, C)
     coordinate = coordinate.permute(0, 2, 1)  # coordinate.shape == (B, N, C)
 
+    K = K * 2 ** scale
     if neighbor_selection_method == 'coordinate':
         idx = knn(coordinate, coordinate, K)  # idx.shape == (B, N, K)
     elif neighbor_selection_method == 'activation':
         idx = knn(pcd, pcd, K)  # idx.shape == (B, N, K)
     else:
         raise ValueError(f'neighbor_selection_method should be coordinate or activation, but got {neighbor_selection_method}')
-    neighbors = index_points(pcd, idx)  # neighbors.shape == (B, N, K, C)
+    neighbors = index_points(pcd, idx)[:, :, ::2**scale, :]  # neighbors.shape == (B, N, K, C)
 
     if neighbor_type == 'neighbor':
         neighbors = neighbors.permute(0, 3, 1, 2)  # output.shape == (B, C, N, K)
@@ -50,18 +51,18 @@ def select_neighbors(pcd, coordinate, K, neighbor_selection_method, neighbor_typ
     return neighbors
 
 
-def group(pcd, coordinate, K, neighbor_selection_method, group_type):
+def group(pcd, coordinate, K, scale, neighbor_selection_method, group_type):
     if group_type == 'neighbor':
-        neighbors = select_neighbors(pcd, coordinate, K, neighbor_selection_method, 'neighbor')  # neighbors.shape == (B, C, N, K)
+        neighbors = select_neighbors(pcd, coordinate, K, scale, neighbor_selection_method, 'neighbor')  # neighbors.shape == (B, C, N, K)
         output = neighbors  # output.shape == (B, C, N, K)
     elif group_type == 'diff':
-        diff = select_neighbors(pcd, coordinate, K, neighbor_selection_method, 'diff')  # diff.shape == (B, C, N, K)
+        diff = select_neighbors(pcd, coordinate, K, scale, neighbor_selection_method, 'diff')  # diff.shape == (B, C, N, K)
         output = diff  # output.shape == (B, C, N, K)
     elif group_type == 'center_neighbor':
-        neighbors = select_neighbors(pcd, coordinate, K, neighbor_selection_method, 'neighbor')   # neighbors.shape == (B, C, N, K)
+        neighbors = select_neighbors(pcd, coordinate, K, scale, neighbor_selection_method, 'neighbor')   # neighbors.shape == (B, C, N, K)
         output = torch.cat([pcd[:, :, :, None].repeat(1, 1, 1, K), neighbors], dim=1)  # output.shape == (B, 2C, N, K)
     elif group_type == 'center_diff':
-        diff = select_neighbors(pcd, coordinate, K, neighbor_selection_method, 'diff')  # diff.shape == (B, C, N, K)
+        diff = select_neighbors(pcd, coordinate, K, scale, neighbor_selection_method, 'diff')  # diff.shape == (B, C, N, K)
         output = torch.cat([pcd[:, :, :, None].repeat(1, 1, 1, K), diff], dim=1)  # output.shape == (B, 2C, N, K)
     else:
         raise ValueError(f'group_type should be neighbor, diff, center_neighbor or center_diff, but got {group_type}')

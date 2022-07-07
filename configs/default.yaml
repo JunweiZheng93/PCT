@@ -117,6 +117,7 @@ embedding:
 point2neighbor_block:
   enable: false  # if false, edgeconv block will be used
   point2neighbor:
+    scale: [0, 0, 0]
     K: [40, 40, 40]  # 3 values in the list means point2neighbor_block includes 3 point2neighbor layers. The 'K' for each layer is 40, 40 and 40 respectively
     neighbor_selection_method: ['activation', 'activation', 'activation']  # coordinate or activation
     group_type: ['diff', 'diff', 'diff']  # diff, neighbor, center_neighbor or center_diff
@@ -147,9 +148,6 @@ point2point_block:
     ff_conv1_channels_out: [512]
     ff_conv2_channels_in: [512]
     ff_conv2_channels_out: [1024]
-
-point2neighbor_multi_scale:
-  enable: true
 
 point2patch:
   enable: true
