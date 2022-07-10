@@ -98,15 +98,16 @@ class Point2NeighborEmbedding(nn.Module):
 
 
 class Point2NeighborAttentionBlock(nn.Module):
-    def __init__(self, scale=(0, 0, 0), shared_ca=(False, False, False), K=(32, 32, 32), neighbor_selection_method=('activation', 'activation', 'activation'),
+    def __init__(self, scale=(0, 0, 0), shared_ca=(False, False, False), concat_ms_inputs=(False, False, False),
+                 K=(32, 32, 32), neighbor_selection_method=('activation', 'activation', 'activation'),
                  group_type=('diff', 'diff', 'diff'), q_in=(64, 64, 64), q_out=(64, 64, 64),
                  k_in=(64, 64, 64), k_out=(64, 64, 64), v_in=(64, 64, 64), v_out=(64, 64, 64), num_heads=(8, 8, 8),
                  ff_conv1_channels_in=(64, 64, 64), ff_conv1_channels_out=(128, 128, 128),
                  ff_conv2_channels_in=(128, 128, 128), ff_conv2_channels_out=(64, 64, 64)):
         super(Point2NeighborAttentionBlock, self).__init__()
-        self.point2neighbor_list = nn.ModuleList([Point2NeighborAttention(s, shared, k, method, g_type, q_input, q_output, k_input, k_output, v_input, v_output, heads, ff_conv1_channel_in, ff_conv1_channel_out, ff_conv2_channel_in, ff_conv2_channel_out)
-                                                  for s, shared, k, method, g_type, q_input, q_output, k_input, k_output, v_input, v_output, heads, ff_conv1_channel_in, ff_conv1_channel_out, ff_conv2_channel_in, ff_conv2_channel_out
-                                                  in zip(scale, shared_ca, K, neighbor_selection_method, group_type, q_in, q_out, k_in, k_out, v_in, v_out, num_heads, ff_conv1_channels_in, ff_conv1_channels_out, ff_conv2_channels_in, ff_conv2_channels_out)])
+        self.point2neighbor_list = nn.ModuleList([Point2NeighborAttention(s, shared, concat, k, method, g_type, q_input, q_output, k_input, k_output, v_input, v_output, heads, ff_conv1_channel_in, ff_conv1_channel_out, ff_conv2_channel_in, ff_conv2_channel_out)
+                                                  for s, shared, concat, k, method, g_type, q_input, q_output, k_input, k_output, v_input, v_output, heads, ff_conv1_channel_in, ff_conv1_channel_out, ff_conv2_channel_in, ff_conv2_channel_out
+                                                  in zip(scale, shared_ca, concat_ms_inputs, K, neighbor_selection_method, group_type, q_in, q_out, k_in, k_out, v_in, v_out, num_heads, ff_conv1_channels_in, ff_conv1_channels_out, ff_conv2_channels_in, ff_conv2_channels_out)])
 
     def forward(self, x, coordinate):
         x_list = []
@@ -118,7 +119,7 @@ class Point2NeighborAttentionBlock(nn.Module):
 
 
 class Point2NeighborAttention(nn.Module):
-    def __init__(self, scale=0, shared_ca=False, K=32, neighbor_selection_method='activation', group_type='diff',
+    def __init__(self, scale=0, shared_ca=False, concat_ms_inputs=False, K=32, neighbor_selection_method='activation', group_type='diff',
                  q_in=64, q_out=64, k_in=64, k_out=64, v_in=64, v_out=64, num_heads=8,
                  ff_conv1_channels_in=64, ff_conv1_channels_out=128,
                  ff_conv2_channels_in=128, ff_conv2_channels_out=64):
@@ -132,7 +133,7 @@ class Point2NeighborAttention(nn.Module):
         if scale == 0:
             self.ca_reslink = CrossAttentionResLink(q_in, q_out, k_in, k_out, v_in, v_out, num_heads, ff_conv1_channels_in, ff_conv1_channels_out, ff_conv2_channels_in, ff_conv2_channels_out)
         else:
-            self.ca_ms = CrossAttentionMS(scale, shared_ca, q_in, q_out, k_in, k_out, v_in, v_out, num_heads, ff_conv1_channels_in, ff_conv1_channels_out, ff_conv2_channels_in, ff_conv2_channels_out)
+            self.ca_ms = CrossAttentionMS(scale, shared_ca, concat_ms_inputs, q_in, q_out, k_in, k_out, v_in, v_out, num_heads, ff_conv1_channels_in, ff_conv1_channels_out, ff_conv2_channels_in, ff_conv2_channels_out)
 
     def forward(self, x, coordinate):
         if self.scale == 0:
@@ -241,16 +242,21 @@ class CrossAttentionResLink(nn.Module):
 
 
 class CrossAttentionMS(nn.Module):
-    def __init__(self, scale, shared_ca, q_in=64, q_out=64, k_in=64, k_out=64, v_in=64, v_out=64, num_heads=8, ff_conv1_channels_in=64,
+    def __init__(self, scale, shared_ca, concat_ms_inputs, q_in=64, q_out=64, k_in=64, k_out=64, v_in=64, v_out=64, num_heads=8, ff_conv1_channels_in=64,
                  ff_conv1_channels_out=128, ff_conv2_channels_in=128, ff_conv2_channels_out=64):
         super(CrossAttentionMS, self).__init__()
         self.shared_ca = shared_ca
+        self.concat_ms_inputs = concat_ms_inputs
+        if concat_ms_inputs:
+            if not shared_ca:
+                raise ValueError('shared_ca must be true when concat_ms_inputs is true')
 
         if shared_ca:
             self.ca = CrossAttention(q_in, q_out, k_in, k_out, v_in, v_out, num_heads)
         else:
             self.ca_list = nn.ModuleList([CrossAttention(q_in, q_out, k_in, k_out, v_in, v_out, num_heads) for _ in range(scale+1)])
-        self.linear = nn.Conv1d(v_out*(scale+1), q_in, 1, bias=False)
+        if not concat_ms_inputs:
+            self.linear = nn.Conv1d(v_out*(scale+1), q_in, 1, bias=False)
         self.ff = nn.Sequential(nn.Conv1d(ff_conv1_channels_in, ff_conv1_channels_out, 1, bias=False),
                                 nn.LeakyReLU(negative_slope=0.2),
                                 nn.Conv1d(ff_conv2_channels_in, ff_conv2_channels_out, 1, bias=False))
@@ -258,22 +264,27 @@ class CrossAttentionMS(nn.Module):
         self.bn2 = nn.BatchNorm1d(v_out)
 
     def forward(self, x, neighbor_list):
-        x_output_list = []
-        if self.shared_ca:
-            for neighbors in neighbor_list:
-                # x.shape == (B, C, N)  neighbors.shape == (B, C, N, K)
-                x_out = self.ca(x, neighbors)
-                # x_out.shape == (B, C, N)
-                x_output_list.append(x_out)
+        if self.concat_ms_inputs:
+            neighbors = torch.concat(neighbor_list, dim=1)
+            x_out = self.ca(x, neighbors)
         else:
-            for neighbors, ca in zip(neighbor_list, self.ca_list):
-                # x.shape == (B, C, N)  neighbors.shape == (B, C, N, K)
-                x_out = ca(x, neighbors)
-                # x_out.shape == (B, C, N)
-                x_output_list.append(x_out)
-        x_out = torch.concat(x_output_list, dim=1)
-        # x_out.shape == (B, C, N)
-        x_out = self.linear(x_out)
+            x_output_list = []
+            if self.shared_ca:
+                for neighbors in neighbor_list:
+                    # x.shape == (B, C, N)  neighbors.shape == (B, C, N, K)
+                    x_out = self.ca(x, neighbors)
+                    # x_out.shape == (B, C, N)
+                    x_output_list.append(x_out)
+            else:
+                for neighbors, ca in zip(neighbor_list, self.ca_list):
+                    # x.shape == (B, C, N)  neighbors.shape == (B, C, N, K)
+                    x_out = ca(x, neighbors)
+                    # x_out.shape == (B, C, N)
+                    x_output_list.append(x_out)
+            x_out = torch.concat(x_output_list, dim=1)
+        if not self.concat_ms_inputs:
+            # x_out.shape == (B, C, N)
+            x_out = self.linear(x_out)
         # x_out.shape == (B, C, N)
         x = self.bn1(x + x_out)
         # x.shape == (B, C, N)
@@ -419,7 +430,8 @@ class ShapeNetModel(nn.Module):
                  p2p_emb_q_in, p2p_emb_q_out, p2p_emb_k_in, p2p_emb_k_out, p2p_emb_v_in, p2p_emb_v_out, p2p_emb_num_heads,
                  egdeconv_emb_K, egdeconv_emb_neighbor_selection_method, egdeconv_emb_group_type, egdeconv_emb_conv1_in,
                  egdeconv_emb_conv1_out, egdeconv_emb_conv2_in, egdeconv_emb_conv2_out, edgeconv_emb_pooling,
-                 p2neighbor_enable, p2neighbor_scale, p2neighbor_shared_ca, p2neighbor_K, p2neighbor_neighbor_selection_method, p2neighbor_group_type, p2neighbor_q_in,
+                 p2neighbor_enable, p2neighbor_scale, p2neighbor_shared_ca, p2neighbor_concat_ms_inputs, p2neighbor_K,
+                 p2neighbor_neighbor_selection_method, p2neighbor_group_type, p2neighbor_q_in,
                  p2neighbor_q_out, p2neighbor_k_in, p2neighbor_k_out, p2neighbor_v_in, p2neighbor_v_out, p2neighbor_num_heads,
                  p2neighbor_ff_conv1_in, p2neighbor_ff_conv1_out, p2neighbor_ff_conv2_in, p2neighbor_ff_conv2_out,
                  edgeconv_K, edgeconv_neighbor_selection_method, edgeconv_group_type, edgeconv_conv1_in, edgeconv_conv1_out,
@@ -442,7 +454,7 @@ class ShapeNetModel(nn.Module):
                 self.embedding = EdgeConv(egdeconv_emb_K, egdeconv_emb_neighbor_selection_method, egdeconv_emb_group_type, egdeconv_emb_conv1_in, egdeconv_emb_conv1_out, egdeconv_emb_conv2_in, egdeconv_emb_conv2_out, edgeconv_emb_pooling)
             else:
                 raise ValueError(f'which_emb should be linear, p2n or p2p. Got {which_emb}')
-            self.point2neighbor_or_edgeconv = Point2NeighborAttentionBlock(p2neighbor_scale, p2neighbor_shared_ca, p2neighbor_K,
+            self.point2neighbor_or_edgeconv = Point2NeighborAttentionBlock(p2neighbor_scale, p2neighbor_shared_ca, p2neighbor_concat_ms_inputs, p2neighbor_K,
                                                                            p2neighbor_neighbor_selection_method, p2neighbor_group_type,
                                                                            p2neighbor_q_in, p2neighbor_q_out, p2neighbor_k_in, p2neighbor_k_out,
                                                                            p2neighbor_v_in, p2neighbor_v_out, p2neighbor_num_heads, p2neighbor_ff_conv1_in,

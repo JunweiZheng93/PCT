@@ -119,6 +119,7 @@ point2neighbor_block:
   point2neighbor:
     scale: [0, 0, 0]
     shared_ca: [false, false, false]
+    concat_ms_inputs: [false, false, false]
     K: [40, 40, 40]  # 3 values in the list means point2neighbor_block includes 3 point2neighbor layers. The 'K' for each layer is 40, 40 and 40 respectively
     neighbor_selection_method: ['activation', 'activation', 'activation']  # coordinate or activation
     group_type: ['diff', 'diff', 'diff']  # diff, neighbor, center_neighbor or center_diff
