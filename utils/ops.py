@@ -34,10 +34,10 @@ def select_neighbors(pcd, coordinate, K, scale, neighbor_selection_method, neigh
     K = K * 2 ** scale
     if neighbor_selection_method == 'coordinate':
         idx = knn(coordinate, coordinate, K)  # idx.shape == (B, N, K)
-    elif neighbor_selection_method == 'activation':
+    elif neighbor_selection_method == 'feature':
         idx = knn(pcd, pcd, K)  # idx.shape == (B, N, K)
     else:
-        raise ValueError(f'neighbor_selection_method should be coordinate or activation, but got {neighbor_selection_method}')
+        raise ValueError(f'neighbor_selection_method should be coordinate or feature, but got {neighbor_selection_method}')
     neighbors = index_points(pcd, idx)[:, :, ::2**scale, :]  # neighbors.shape == (B, N, K, C)
 
     if neighbor_type == 'neighbor':

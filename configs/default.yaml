@@ -72,7 +72,7 @@ test:  # only valid when running the test script
 
 edgeconv_block:
   K: [40, 40, 40]
-  neighbor_selection_method: ['activation', 'activation', 'activation']  # coordinate or activation
+  neighbor_selection_method: ['feature', 'feature', 'feature']  # coordinate or feature
   group_type: ['center_diff', 'center_diff', 'center_diff']  # neighbor, diff, center_neighbor or center_diff
   conv1_channel_in: [6, 128, 128]
   conv1_channel_out: [64, 64, 64]
@@ -81,13 +81,13 @@ edgeconv_block:
   pooling: ['max', 'max', 'max']
 
 embedding:
-  which_embedding: edgeconv  # p2p, p2n, linear or edgeconv
+  which_embedding: edgeconv  # p2p, n2p, linear or edgeconv
   linear:
     emb_in: 3
     emb_out: 64
-  point2neighbor_embedding:
+  neighbor2point_embedding:
     K: 40
-    neighbor_selection_method: coordinate  # coordinate or activation
+    neighbor_selection_method: coordinate  # coordinate or feature
     group_type: diff  # diff, neighbor, center_neighbor or center_diff
     q_in: 3
     q_out: 32
@@ -106,7 +106,7 @@ embedding:
     num_heads: 8
   edgeconv_embedding:
     K: 40
-    neighbor_selection_method: coordinate  # coordinate or activation
+    neighbor_selection_method: coordinate  # coordinate or feature
     group_type: center_diff  # neighbor, diff, center_neighbor or center_diff
     conv1_in: 6
     conv1_out: 64
@@ -114,14 +114,14 @@ embedding:
     conv2_out: 64
     pooling: max
 
-point2neighbor_block:
+neighbor2point_block:
   enable: false  # if false, edgeconv block will be used
-  point2neighbor:
+  neighbor2point:
     scale: [0, 0, 0]
     shared_ca: [false, false, false]
     concat_ms_inputs: [false, false, false]
-    K: [40, 40, 40]  # 3 values in the list means point2neighbor_block includes 3 point2neighbor layers. The 'K' for each layer is 40, 40 and 40 respectively
-    neighbor_selection_method: ['activation', 'activation', 'activation']  # coordinate or activation
+    K: [40, 40, 40]  # 3 values in the list means neighbor2point_block includes 3 neighbor2point layers. The 'K' for each layer is 40, 40 and 40 respectively
+    neighbor_selection_method: ['feature', 'feature', 'feature']  # coordinate or feature
     group_type: ['diff', 'diff', 'diff']  # diff, neighbor, center_neighbor or center_diff
     q_in: [64, 64, 64]
     q_out: [64, 64, 64]
@@ -129,7 +129,7 @@ point2neighbor_block:
     k_out: [64, 64, 64]
     v_in: [64, 64, 64]
     v_out: [64, 64, 64]
-    num_heads: [8, 8, 8]
+    num_heads: [4, 4, 4]
     ff_conv1_channels_in: [64, 64, 64]
     ff_conv1_channels_out: [128, 128, 128]
     ff_conv2_channels_in: [128, 128, 128]
@@ -151,5 +151,5 @@ point2point_block:
     ff_conv2_channels_in: [512]
     ff_conv2_channels_out: [1024]
 
-point2patch:
+patch2point:
   enable: true

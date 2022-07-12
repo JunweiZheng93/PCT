@@ -5,7 +5,7 @@ import math
 
 
 class EdgeConvBlock(nn.Module):
-    def __init__(self, K=(32, 32, 32), neighbor_selection_method=('activation', 'activation', 'activation'), group_type=('center_diff', 'center_diff', 'center_diff'),
+    def __init__(self, K=(32, 32, 32), neighbor_selection_method=('feature', 'feature', 'feature'), group_type=('center_diff', 'center_diff', 'center_diff'),
                  conv1_channel_in=(3*2, 64*2, 64*2), conv1_channel_out=(64, 64, 64), conv2_channel_in=(64, 64, 64), conv2_channel_out=(64, 64, 64), pooling=('max', 'max', 'max')):
         super(EdgeConvBlock, self).__init__()
         self.edgeconv_list = nn.ModuleList([EdgeConv(k, method, g_type, conv1_in, conv1_out, conv2_in, conv2_out, pool)
@@ -22,7 +22,7 @@ class EdgeConvBlock(nn.Module):
 
 
 class EdgeConv(nn.Module):
-    def __init__(self, K=32, neighbor_selection_method='activation', group_type='center_diff',
+    def __init__(self, K=32, neighbor_selection_method='feature', group_type='center_diff',
                  conv1_channel_in=6, conv1_channel_out=64, conv2_channel_in=64, conv2_channel_out=64, pooling='max'):
 
         super(EdgeConv, self).__init__()
@@ -80,9 +80,9 @@ class Point2PointEmbedding(nn.Module):
         return x
 
 
-class Point2NeighborEmbedding(nn.Module):
+class Neighbor2PointEmbedding(nn.Module):
     def __init__(self, K=32, neighbor_selection_method='coordinate', group_type='diff', q_in=3, q_out=64, k_in=3, k_out=64, v_in=3, v_out=64, num_heads=8):
-        super(Point2NeighborEmbedding, self).__init__()
+        super(Neighbor2PointEmbedding, self).__init__()
         self.K = K
         self.neighbor_selection_method = neighbor_selection_method
         self.group_type = group_type
@@ -97,34 +97,34 @@ class Point2NeighborEmbedding(nn.Module):
         return x
 
 
-class Point2NeighborAttentionBlock(nn.Module):
+class Neighbor2PointAttentionBlock(nn.Module):
     def __init__(self, scale=(0, 0, 0), shared_ca=(False, False, False), concat_ms_inputs=(False, False, False),
-                 K=(32, 32, 32), neighbor_selection_method=('activation', 'activation', 'activation'),
+                 K=(32, 32, 32), neighbor_selection_method=('feature', 'feature', 'feature'),
                  group_type=('diff', 'diff', 'diff'), q_in=(64, 64, 64), q_out=(64, 64, 64),
                  k_in=(64, 64, 64), k_out=(64, 64, 64), v_in=(64, 64, 64), v_out=(64, 64, 64), num_heads=(8, 8, 8),
                  ff_conv1_channels_in=(64, 64, 64), ff_conv1_channels_out=(128, 128, 128),
                  ff_conv2_channels_in=(128, 128, 128), ff_conv2_channels_out=(64, 64, 64)):
-        super(Point2NeighborAttentionBlock, self).__init__()
-        self.point2neighbor_list = nn.ModuleList([Point2NeighborAttention(s, shared, concat, k, method, g_type, q_input, q_output, k_input, k_output, v_input, v_output, heads, ff_conv1_channel_in, ff_conv1_channel_out, ff_conv2_channel_in, ff_conv2_channel_out)
+        super(Neighbor2PointAttentionBlock, self).__init__()
+        self.neighbor2point_list = nn.ModuleList([Neighbor2PointAttention(s, shared, concat, k, method, g_type, q_input, q_output, k_input, k_output, v_input, v_output, heads, ff_conv1_channel_in, ff_conv1_channel_out, ff_conv2_channel_in, ff_conv2_channel_out)
                                                   for s, shared, concat, k, method, g_type, q_input, q_output, k_input, k_output, v_input, v_output, heads, ff_conv1_channel_in, ff_conv1_channel_out, ff_conv2_channel_in, ff_conv2_channel_out
                                                   in zip(scale, shared_ca, concat_ms_inputs, K, neighbor_selection_method, group_type, q_in, q_out, k_in, k_out, v_in, v_out, num_heads, ff_conv1_channels_in, ff_conv1_channels_out, ff_conv2_channels_in, ff_conv2_channels_out)])
 
     def forward(self, x, coordinate):
         x_list = []
-        for point2neighbor in self.point2neighbor_list:
-            x = point2neighbor(x, coordinate)
+        for neighbor2point in self.neighbor2point_list:
+            x = neighbor2point(x, coordinate)
             x_list.append(x)
         x = torch.cat(x_list, dim=1)
         return x, x_list
 
 
-class Point2NeighborAttention(nn.Module):
-    def __init__(self, scale=0, shared_ca=False, concat_ms_inputs=False, K=32, neighbor_selection_method='activation', group_type='diff',
+class Neighbor2PointAttention(nn.Module):
+    def __init__(self, scale=0, shared_ca=False, concat_ms_inputs=False, K=32, neighbor_selection_method='feature', group_type='diff',
                  q_in=64, q_out=64, k_in=64, k_out=64, v_in=64, v_out=64, num_heads=8,
                  ff_conv1_channels_in=64, ff_conv1_channels_out=128,
                  ff_conv2_channels_in=128, ff_conv2_channels_out=64):
 
-        super(Point2NeighborAttention, self).__init__()
+        super(Neighbor2PointAttention, self).__init__()
         self.scale = scale
         self.K = K
         self.neighbor_selection_method = neighbor_selection_method
@@ -186,11 +186,11 @@ class CrossAttention(nn.Module):
         k = self.k_conv(neighbors)
         # k.shape ==  (B, C, N, K)
         k = self.split_heads(k, self.num_heads, self.k_depth)
-        # k.shape == (B, H, N, k, D)
+        # k.shape == (B, H, N, K, D)
         v = self.v_conv(neighbors)
         # v.shape ==  (B, C, N, K)
         v = self.split_heads(v, self.num_heads, self.v_depth)
-        # v.shape == (B, H, N, k, D)
+        # v.shape == (B, H, N, K, D)
         k = k.permute(0, 1, 2, 4, 3)
         # k.shape == (B, H, N, D, K)
         energy = q @ k
@@ -425,43 +425,43 @@ class ConvBlock(nn.Module):
 
 
 class ShapeNetModel(nn.Module):
-    def __init__(self, which_emb, linear_emb_in, linear_emb_out, p2n_emb_K, p2n_emb_neighbor_selection_method, p2n_emb_group_type,
-                 p2n_emb_q_in, p2n_emb_q_out, p2n_emb_k_in, p2n_emb_k_out, p2n_emb_v_in, p2n_emb_v_out, p2n_emb_num_heads,
+    def __init__(self, which_emb, linear_emb_in, linear_emb_out, n2p_emb_K, n2p_emb_neighbor_selection_method, n2p_emb_group_type,
+                 n2p_emb_q_in, n2p_emb_q_out, n2p_emb_k_in, n2p_emb_k_out, n2p_emb_v_in, n2p_emb_v_out, n2p_emb_num_heads,
                  p2p_emb_q_in, p2p_emb_q_out, p2p_emb_k_in, p2p_emb_k_out, p2p_emb_v_in, p2p_emb_v_out, p2p_emb_num_heads,
                  egdeconv_emb_K, egdeconv_emb_neighbor_selection_method, egdeconv_emb_group_type, egdeconv_emb_conv1_in,
                  egdeconv_emb_conv1_out, egdeconv_emb_conv2_in, egdeconv_emb_conv2_out, edgeconv_emb_pooling,
-                 p2neighbor_enable, p2neighbor_scale, p2neighbor_shared_ca, p2neighbor_concat_ms_inputs, p2neighbor_K,
-                 p2neighbor_neighbor_selection_method, p2neighbor_group_type, p2neighbor_q_in,
-                 p2neighbor_q_out, p2neighbor_k_in, p2neighbor_k_out, p2neighbor_v_in, p2neighbor_v_out, p2neighbor_num_heads,
-                 p2neighbor_ff_conv1_in, p2neighbor_ff_conv1_out, p2neighbor_ff_conv2_in, p2neighbor_ff_conv2_out,
+                 neighbor2point_enable, neighbor2point_scale, neighbor2point_shared_ca, neighbor2point_concat_ms_inputs, neighbor2point_K,
+                 neighbor2point_neighbor_selection_method, neighbor2point_group_type, neighbor2point_q_in,
+                 neighbor2point_q_out, neighbor2point_k_in, neighbor2point_k_out, neighbor2point_v_in, neighbor2point_v_out, neighbor2point_num_heads,
+                 neighbor2point_ff_conv1_in, neighbor2point_ff_conv1_out, neighbor2point_ff_conv2_in, neighbor2point_ff_conv2_out,
                  edgeconv_K, edgeconv_neighbor_selection_method, edgeconv_group_type, edgeconv_conv1_in, edgeconv_conv1_out,
                  edgeconv_conv2_in, edgeconv_conv2_out, edgeconv_pooling, p2point_enable, p2point_use_embedding, p2point_embed_in, p2point_embed_out,
                  p2point_qkv_channels, p2point_ff_conv1_in, p2point_ff_conv1_out, p2point_ff_conv2_in, p2point_ff_conv2_out,
                  conv_block_channels_in, conv_block_channels_out):
 
         super(ShapeNetModel, self).__init__()
-        self.p2neighbor_enable = p2neighbor_enable
+        self.neighbor2point_enable = neighbor2point_enable
         self.which_emb = which_emb
 
-        if p2neighbor_enable:
+        if neighbor2point_enable:
             if which_emb == 'linear':
                 self.embedding = LinearEmbedding(linear_emb_in, linear_emb_out)
-            elif which_emb == 'p2n':
-                self.embedding = Point2NeighborEmbedding(p2n_emb_K, p2n_emb_neighbor_selection_method, p2n_emb_group_type, p2n_emb_q_in, p2n_emb_q_out, p2n_emb_k_in, p2n_emb_k_out, p2n_emb_v_in, p2n_emb_v_out, p2n_emb_num_heads)
+            elif which_emb == 'n2p':
+                self.embedding = Neighbor2PointEmbedding(n2p_emb_K, n2p_emb_neighbor_selection_method, n2p_emb_group_type, n2p_emb_q_in, n2p_emb_q_out, n2p_emb_k_in, n2p_emb_k_out, n2p_emb_v_in, n2p_emb_v_out, n2p_emb_num_heads)
             elif which_emb == 'p2p':
                 self.embedding = Point2PointEmbedding(p2p_emb_q_in, p2p_emb_q_out, p2p_emb_k_in, p2p_emb_k_out, p2p_emb_v_in, p2p_emb_v_out, p2p_emb_num_heads)
             elif which_emb == 'edgeconv':
                 self.embedding = EdgeConv(egdeconv_emb_K, egdeconv_emb_neighbor_selection_method, egdeconv_emb_group_type, egdeconv_emb_conv1_in, egdeconv_emb_conv1_out, egdeconv_emb_conv2_in, egdeconv_emb_conv2_out, edgeconv_emb_pooling)
             else:
-                raise ValueError(f'which_emb should be linear, p2n or p2p. Got {which_emb}')
-            self.point2neighbor_or_edgeconv = Point2NeighborAttentionBlock(p2neighbor_scale, p2neighbor_shared_ca, p2neighbor_concat_ms_inputs, p2neighbor_K,
-                                                                           p2neighbor_neighbor_selection_method, p2neighbor_group_type,
-                                                                           p2neighbor_q_in, p2neighbor_q_out, p2neighbor_k_in, p2neighbor_k_out,
-                                                                           p2neighbor_v_in, p2neighbor_v_out, p2neighbor_num_heads, p2neighbor_ff_conv1_in,
-                                                                           p2neighbor_ff_conv1_out, p2neighbor_ff_conv2_in, p2neighbor_ff_conv2_out)
-            x_cat_channels = sum(p2neighbor_ff_conv2_out)
+                raise ValueError(f'which_emb should be linear, n2p or p2p. Got {which_emb}')
+            self.neighbor2point_or_edgeconv = Neighbor2PointAttentionBlock(neighbor2point_scale, neighbor2point_shared_ca, neighbor2point_concat_ms_inputs, neighbor2point_K,
+                                                                           neighbor2point_neighbor_selection_method, neighbor2point_group_type,
+                                                                           neighbor2point_q_in, neighbor2point_q_out, neighbor2point_k_in, neighbor2point_k_out,
+                                                                           neighbor2point_v_in, neighbor2point_v_out, neighbor2point_num_heads, neighbor2point_ff_conv1_in,
+                                                                           neighbor2point_ff_conv1_out, neighbor2point_ff_conv2_in, neighbor2point_ff_conv2_out)
+            x_cat_channels = sum(neighbor2point_ff_conv2_out)
         else:
-            self.point2neighbor_or_edgeconv = EdgeConvBlock(edgeconv_K, edgeconv_neighbor_selection_method, edgeconv_group_type, edgeconv_conv1_in, edgeconv_conv1_out, edgeconv_conv2_in, edgeconv_conv2_out, edgeconv_pooling)
+            self.neighbor2point_or_edgeconv = EdgeConvBlock(edgeconv_K, edgeconv_neighbor_selection_method, edgeconv_group_type, edgeconv_conv1_in, edgeconv_conv1_out, edgeconv_conv2_in, edgeconv_conv2_out, edgeconv_pooling)
             x_cat_channels = sum(edgeconv_conv2_out)
 
         if p2point_enable:
@@ -493,13 +493,13 @@ class ShapeNetModel(nn.Module):
         # x.shape == (B, C=3, N)  category_id.shape == (B, 16, 1)
         B, C, N = x.shape
         # x.shape == (B, C=3, N)
-        if self.p2neighbor_enable:
-            if self.which_emb == 'p2n' or self.which_emb == 'edgeconv':
+        if self.neighbor2point_enable:
+            if self.which_emb == 'n2p' or self.which_emb == 'edgeconv':
                 x = self.embedding(x, coordinate)
             else:
                 x = self.embedding(x)
             # x.shape == (B, C, N)
-        x, x_list = self.point2neighbor_or_edgeconv(x, coordinate)
+        x, x_list = self.neighbor2point_or_edgeconv(x, coordinate)
         # x.shape == (B, C, N)    torch.cat(x_list, dim=1).shape == (B, C1, N)
         x = self.point2point_or_conv(x)
         # x.shape == (B, C, N)

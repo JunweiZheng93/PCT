@@ -99,24 +99,24 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
 
     # get model
     my_model = shapenet_model.ShapeNetModel(config.embedding.which_embedding, config.embedding.linear.emb_in, config.embedding.linear.emb_out,
-                                            config.embedding.point2neighbor_embedding.K, config.embedding.point2neighbor_embedding.neighbor_selection_method, config.embedding.point2neighbor_embedding.group_type,
-                                            config.embedding.point2neighbor_embedding.q_in, config.embedding.point2neighbor_embedding.q_out,
-                                            config.embedding.point2neighbor_embedding.k_in, config.embedding.point2neighbor_embedding.k_out,
-                                            config.embedding.point2neighbor_embedding.v_in, config.embedding.point2neighbor_embedding.v_out, config.embedding.point2neighbor_embedding.num_heads,
+                                            config.embedding.neighbor2point_embedding.K, config.embedding.neighbor2point_embedding.neighbor_selection_method, config.embedding.neighbor2point_embedding.group_type,
+                                            config.embedding.neighbor2point_embedding.q_in, config.embedding.neighbor2point_embedding.q_out,
+                                            config.embedding.neighbor2point_embedding.k_in, config.embedding.neighbor2point_embedding.k_out,
+                                            config.embedding.neighbor2point_embedding.v_in, config.embedding.neighbor2point_embedding.v_out, config.embedding.neighbor2point_embedding.num_heads,
                                             config.embedding.point2point_embedding.q_in, config.embedding.point2point_embedding.q_out,
                                             config.embedding.point2point_embedding.k_in, config.embedding.point2point_embedding.k_out,
                                             config.embedding.point2point_embedding.v_in, config.embedding.point2point_embedding.v_out, config.embedding.point2point_embedding.num_heads,
                                             config.embedding.edgeconv_embedding.K, config.embedding.edgeconv_embedding.neighbor_selection_method, config.embedding.edgeconv_embedding.group_type,
                                             config.embedding.edgeconv_embedding.conv1_in, config.embedding.edgeconv_embedding.conv1_out,
                                             config.embedding.edgeconv_embedding.conv2_in, config.embedding.edgeconv_embedding.conv2_out, config.embedding.edgeconv_embedding.pooling,
-                                            config.point2neighbor_block.enable, config.point2neighbor_block.point2neighbor.scale, config.point2neighbor_block.point2neighbor.shared_ca,
-                                            config.point2neighbor_block.point2neighbor.concat_ms_inputs, config.point2neighbor_block.point2neighbor.K,
-                                            config.point2neighbor_block.point2neighbor.neighbor_selection_method, config.point2neighbor_block.point2neighbor.group_type,
-                                            config.point2neighbor_block.point2neighbor.q_in, config.point2neighbor_block.point2neighbor.q_out, config.point2neighbor_block.point2neighbor.k_in,
-                                            config.point2neighbor_block.point2neighbor.k_out, config.point2neighbor_block.point2neighbor.v_in,
-                                            config.point2neighbor_block.point2neighbor.v_out, config.point2neighbor_block.point2neighbor.num_heads, config.point2neighbor_block.point2neighbor.ff_conv1_channels_in,
-                                            config.point2neighbor_block.point2neighbor.ff_conv1_channels_out, config.point2neighbor_block.point2neighbor.ff_conv2_channels_in,
-                                            config.point2neighbor_block.point2neighbor.ff_conv2_channels_out, config.edgeconv_block.K, config.edgeconv_block.neighbor_selection_method,
+                                            config.neighbor2point_block.enable, config.neighbor2point_block.neighbor2point.scale, config.neighbor2point_block.neighbor2point.shared_ca,
+                                            config.neighbor2point_block.neighbor2point.concat_ms_inputs, config.neighbor2point_block.neighbor2point.K,
+                                            config.neighbor2point_block.neighbor2point.neighbor_selection_method, config.neighbor2point_block.neighbor2point.group_type,
+                                            config.neighbor2point_block.neighbor2point.q_in, config.neighbor2point_block.neighbor2point.q_out, config.neighbor2point_block.neighbor2point.k_in,
+                                            config.neighbor2point_block.neighbor2point.k_out, config.neighbor2point_block.neighbor2point.v_in,
+                                            config.neighbor2point_block.neighbor2point.v_out, config.neighbor2point_block.neighbor2point.num_heads, config.neighbor2point_block.neighbor2point.ff_conv1_channels_in,
+                                            config.neighbor2point_block.neighbor2point.ff_conv1_channels_out, config.neighbor2point_block.neighbor2point.ff_conv2_channels_in,
+                                            config.neighbor2point_block.neighbor2point.ff_conv2_channels_out, config.edgeconv_block.K, config.edgeconv_block.neighbor_selection_method,
                                             config.edgeconv_block.group_type, config.edgeconv_block.conv1_channel_in, config.edgeconv_block.conv1_channel_out,
                                             config.edgeconv_block.conv2_channel_in, config.edgeconv_block.conv2_channel_out, config.edgeconv_block.pooling, config.point2point_block.enable,
                                             config.point2point_block.use_embedding, config.point2point_block.embedding_channels_in, config.point2point_block.embedding_channels_out,
@@ -206,7 +206,10 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
         # decay lr
         current_lr = optimizer.param_groups[0]['lr']
         if config.train.lr_scheduler.enable:
-            scheduler.step()
+            if config.train.lr_scheduler.which == 'cosLR' and epoch + 1 > config.train.lr_scheduler.cosLR.T_max:
+                pass
+            else:
+                scheduler.step()
 
         # calculate metrics
         if rank == 0:
