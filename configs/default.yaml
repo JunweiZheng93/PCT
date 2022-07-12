@@ -72,13 +72,13 @@ test:  # only valid when running the test script
 
 edgeconv_block:
   K: [40, 40, 40]
-  neighbor_selection_method: ['feature', 'feature', 'feature']  # coordinate or feature
-  group_type: ['center_diff', 'center_diff', 'center_diff']  # neighbor, diff, center_neighbor or center_diff
+  neighbor_selection_method: [feature, feature, feature]  # coordinate or feature
+  group_type: [center_diff, center_diff, center_diff]  # neighbor, diff, center_neighbor or center_diff
   conv1_channel_in: [6, 128, 128]
   conv1_channel_out: [64, 64, 64]
   conv2_channel_in: [64, 64, 64]
   conv2_channel_out: [64, 64, 64]
-  pooling: ['max', 'max', 'max']
+  pooling: [max, max, max]
 
 embedding:
   which_embedding: edgeconv  # p2p, n2p, linear or edgeconv
@@ -120,9 +120,10 @@ neighbor2point_block:
     scale: [0, 0, 0]
     shared_ca: [false, false, false]
     concat_ms_inputs: [false, false, false]
+    mlp_or_ca: [mlp, mlp, mlp]
     K: [40, 40, 40]  # 3 values in the list means neighbor2point_block includes 3 neighbor2point layers. The 'K' for each layer is 40, 40 and 40 respectively
-    neighbor_selection_method: ['feature', 'feature', 'feature']  # coordinate or feature
-    group_type: ['diff', 'diff', 'diff']  # diff, neighbor, center_neighbor or center_diff
+    neighbor_selection_method: [feature, feature, feature]  # coordinate or feature
+    group_type: [diff, diff, diff]  # diff, neighbor, center_neighbor or center_diff
     q_in: [64, 64, 64]
     q_out: [64, 64, 64]
     k_in: [64, 64, 64]

@@ -110,7 +110,7 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
                                             config.embedding.edgeconv_embedding.conv1_in, config.embedding.edgeconv_embedding.conv1_out,
                                             config.embedding.edgeconv_embedding.conv2_in, config.embedding.edgeconv_embedding.conv2_out, config.embedding.edgeconv_embedding.pooling,
                                             config.neighbor2point_block.enable, config.neighbor2point_block.neighbor2point.scale, config.neighbor2point_block.neighbor2point.shared_ca,
-                                            config.neighbor2point_block.neighbor2point.concat_ms_inputs, config.neighbor2point_block.neighbor2point.K,
+                                            config.neighbor2point_block.neighbor2point.concat_ms_inputs, config.neighbor2point_block.neighbor2point.mlp_or_ca, config.neighbor2point_block.neighbor2point.K,
                                             config.neighbor2point_block.neighbor2point.neighbor_selection_method, config.neighbor2point_block.neighbor2point.group_type,
                                             config.neighbor2point_block.neighbor2point.q_in, config.neighbor2point_block.neighbor2point.q_out, config.neighbor2point_block.neighbor2point.k_in,
                                             config.neighbor2point_block.neighbor2point.k_out, config.neighbor2point_block.neighbor2point.v_in,
