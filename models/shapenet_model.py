@@ -228,14 +228,20 @@ class CrossAttentionResLink(nn.Module):
                                 nn.Conv1d(ff_conv2_channels_in, ff_conv2_channels_out, 1, bias=False))
         self.bn1 = nn.BatchNorm1d(v_out)
         self.bn2 = nn.BatchNorm1d(v_out)
-        
+        self.dp1 = nn.Dropout(0.5)
+        self.dp2 = nn.Dropout(0.5)
+
     def forward(self, x, neighbors):
         # x.shape == (B, C, N)  neighbors.shape == (B, C, N, K)
         x_out = self.ca(x, neighbors)
         # x_out.shape == (B, C, N)
+        x_out = self.dp1(x_out)
+        # x_out.shape == (B, C, N)
         x = self.bn1(x + x_out)
         # x.shape == (B, C, N)
         x_out = self.ff(x)
+        # x_out.shape == (B, C, N)
+        x_out = self.dp2(x_out)
         # x_out.shape == (B, C, N)
         x = self.bn2(x + x_out)
         # x.shape == (B, C, N)
@@ -271,6 +277,8 @@ class CrossAttentionMS(nn.Module):
                                 nn.Conv1d(ff_conv2_channels_in, ff_conv2_channels_out, 1, bias=False))
         self.bn1 = nn.BatchNorm1d(v_out)
         self.bn2 = nn.BatchNorm1d(v_out)
+        self.dp1 = nn.Dropout(0.5)
+        self.dp2 = nn.Dropout(0.5)
 
     def forward(self, x, neighbor_list):
         if self.concat_ms_inputs:
@@ -301,9 +309,13 @@ class CrossAttentionMS(nn.Module):
                 x_out = self.ca_aggregation(x, neighbors)
                 # x_out.shape == (B, C, N)
         # x_out.shape == (B, C, N)
+        x_out = self.dp1(x_out)
+        # x_out.shape == (B, C, N)
         x = self.bn1(x + x_out)
         # x.shape == (B, C, N)
         x_out = self.ff(x)
+        # x_out.shape == (B, C, N)
+        x_out = self.dp2(x_out)
         # x_out.shape == (B, C, N)
         x = self.bn2(x + x_out)
         # x.shape == (B, C, N)
