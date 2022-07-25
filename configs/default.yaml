@@ -60,15 +60,27 @@ train:  # only valid when running the training script
   amp: true  # whether to use automatic mixed precision
 
 test:  # only valid when running the test script
-  which_gpu: [0]  # the name of the run you want to test
-  pin_memory: true  # pin memory in RAM
   label_smoothing: true
   epsilon: 0.2  # epsilon for label smoothing
   dataloader:
-    batch_size: 8
-    shuffle: false
-    num_workers: 16  # the number of subprocess to load data
-    prefetch: ${test.dataloader.batch_size}  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
+    batch_size_per_gpu: 4
+    num_workers: ${test.ddp.nproc_this_node}  # the number of subprocess to load data
+    prefetch: ${test.dataloader.batch_size_per_gpu}  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
+    pin_memory: true  # pin memory in RAM
+  ddp:
+    which_gpu: [0]
+    master_addr: localhost  # don't change this if you use only one PC
+    master_port: 12345  # please choose an available port
+    nnodes: 1  # how many PCs you want to use
+    nproc_this_node: 1  # how many gpu you want to use in current PC, should match 'which_gpu'
+    rank_starts_from: 0  # don't change this if you use only one PC
+    world_size: 1  # this is equal to 'nproc_this_node' if you only use one PC
+  print_results: true
+  visualize_preds:
+    enable: false
+    num_vis: 5  # how many point clouds to visualize for one category
+  visualize_neighbors:
+    enable: false
 
 edgeconv_block:
   K: [40, 40, 40]

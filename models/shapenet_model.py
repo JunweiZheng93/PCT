@@ -39,7 +39,7 @@ class EdgeConv(nn.Module):
                                    nn.LeakyReLU(negative_slope=0.2))
 
     def forward(self, x, coordinate):
-        # x.shape == (B, C, N)   xyz.shape == (B, C, N)
+        # x.shape == (B, C, N)   coordinate.shape == (B, C, N)
         x = ops.group(x, coordinate, self.K, 0, self.neighbor_selection_method, self.group_type)
         # x.shape == (B, 2C, N, K) or (B, C, N, K)
         x = self.conv1(x)

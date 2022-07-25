@@ -69,7 +69,18 @@ def calculate_shape_IoU(pred, seg_label, category_id, mapping):
 #     return torch.mean(torch.Tensor(shape_ious).cuda())
 
 
-def calculate_category_IoU(shape_ious, categories, mapping):
+def calculate_category_IoU(shape_ious, category_id, mapping):
+
+    # get category names
+    category_id_to_hash_code_mapping = {}
+    for hash_code in list(mapping.keys()):
+        category_id_to_hash_code_mapping[str(mapping[hash_code]['category_id'])] = hash_code
+    categories = []
+    for cat_id in category_id:
+        hash_code = category_id_to_hash_code_mapping[str(cat_id)]
+        categories.append(mapping[hash_code]['category'])
+
+    # calculate category IoU
     collections = {}
     category_IoU = {}
     for hash_code in list(mapping.keys()):

@@ -4,3 +4,4 @@ pkbar==0.5
 hydra_core==1.2.0
 wandb==0.12.19
 wget==3.2
+plyfile==0.7.4
