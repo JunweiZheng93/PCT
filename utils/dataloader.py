@@ -186,7 +186,8 @@ class ShapeNet_AnTao350M(torch.utils.data.Dataset):
         pcd = pcd[:self.selected_points]
         pcd = pcd[indices]
         if self.augmentation:
-            augmentation, params = np.random.choice(self.augmentation_list)
+            choice = np.random.choice(len(self.augmentation_list))
+            augmentation, params = self.augmentation_list[choice]
             pcd = augmentation(pcd, *params)
         pcd = torch.Tensor(pcd).to(torch.float32)
         pcd = pcd.permute(1, 0)
