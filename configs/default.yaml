@@ -48,6 +48,26 @@ train:  # only valid when running the training script
     num_workers: ${train.ddp.nproc_this_node}  # the number of subprocess to load data
     prefetch: ${train.dataloader.batch_size_per_gpu}  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
     pin_memory: true  # pin memory in RAM
+    data_augmentation:
+      enable: false
+      jitter:  # add Gaussian noise to point cloud xyz positions
+        enable: true
+        std: 0.01
+        clip: 0.05
+      rotate:
+        enable: true
+        which_axis: z
+        angle_range: [-15, 15]  # the unit is degree
+      translate:
+        enable: true
+        x_range: [-0.2, 0.2]
+        y_range: [-0.2, 0.2]
+        z_range: [-0.2, 0.2]
+      anisotropic_scale:
+        enable: true
+        x_range: [0.66, 1.5]
+        y_range: [0.66, 1.5]
+        z_range: [0.66, 1.5]
   ddp:
     which_gpu: [0]
     syn_bn: true  # synchronize batch normalization among gpus

@@ -9,6 +9,7 @@ import json
 import numpy as np
 import h5py
 import glob
+from utils import data_augmentation
 
 
 # ================================================================================
@@ -123,8 +124,23 @@ def download_shapenet_AnTao350M(url, saved_path):
 
 
 class ShapeNet_AnTao350M(torch.utils.data.Dataset):
-    def __init__(self, saved_path, partition, selected_points):
+    def __init__(self, saved_path, partition, selected_points, augmentation, jitter, std, clip, rotate, which_axis,
+                 angle_range, translate, x_translate_range, y_translate_range, z_translate_range, anisotropic_scale,
+                 x_scale_range, y_scale_range, z_scale_range):
         self.selected_points = selected_points
+        self.augmentation = augmentation
+        if augmentation:
+            self.augmentation_list = []
+            if jitter:
+                self.augmentation_list.append([data_augmentation.jitter, [std, clip]])
+            if rotate:
+                self.augmentation_list.append([data_augmentation.rotate, [which_axis, angle_range]])
+            if translate:
+                self.augmentation_list.append([data_augmentation.translate, [x_translate_range, y_translate_range, z_translate_range]])
+            if anisotropic_scale:
+                self.augmentation_list.append([data_augmentation.anisotropic_scale, [x_scale_range, y_scale_range, z_scale_range]])
+            if not jitter and not rotate and not translate and not anisotropic_scale:
+                raise ValueError('At least one kind of data augmentation should be applied!')
         self.all_pcd = []
         self.all_cls_label = []
         self.all_seg_label = []
@@ -169,6 +185,9 @@ class ShapeNet_AnTao350M(torch.utils.data.Dataset):
         pcd = self.all_pcd[index]
         pcd = pcd[:self.selected_points]
         pcd = pcd[indices]
+        if self.augmentation:
+            augmentation, params = np.random.choice(self.augmentation_list)
+            pcd = augmentation(pcd, *params)
         pcd = torch.Tensor(pcd).to(torch.float32)
         pcd = pcd.permute(1, 0)
 
@@ -176,14 +195,24 @@ class ShapeNet_AnTao350M(torch.utils.data.Dataset):
         return pcd, seg_label, category_onehot
 
 
-def get_shapenet_dataset_AnTao350M(url, saved_path, selected_points=1024):
+def get_shapenet_dataset_AnTao350M(url, saved_path, selected_points, augmentation, jitter, std, clip, rotate, which_axis,
+                 angle_range, translate, x_translate_range, y_translate_range, z_translate_range, anisotropic_scale,
+                 x_scale_range, y_scale_range, z_scale_range):
     # download dataset
     download_shapenet_AnTao350M(url, saved_path)
     # get dataset
-    train_set = ShapeNet_AnTao350M(saved_path, 'train', selected_points)
-    validation_set = ShapeNet_AnTao350M(saved_path, 'val', selected_points)
-    trainval_set = ShapeNet_AnTao350M(saved_path, 'trainval', selected_points)
-    test_set = ShapeNet_AnTao350M(saved_path, 'test', selected_points)
+    train_set = ShapeNet_AnTao350M(saved_path, 'train', selected_points, augmentation, jitter, std, clip, rotate, which_axis,
+                                   angle_range, translate, x_translate_range, y_translate_range, z_translate_range, anisotropic_scale,
+                                   x_scale_range, y_scale_range, z_scale_range)
+    validation_set = ShapeNet_AnTao350M(saved_path, 'val', selected_points, False, jitter, std, clip, rotate, which_axis,
+                                        angle_range, translate, x_translate_range, y_translate_range, z_translate_range, anisotropic_scale,
+                                        x_scale_range, y_scale_range, z_scale_range)
+    trainval_set = ShapeNet_AnTao350M(saved_path, 'trainval', selected_points, augmentation, jitter, std, clip, rotate, which_axis,
+                                      angle_range, translate, x_translate_range, y_translate_range, z_translate_range, anisotropic_scale,
+                                      x_scale_range, y_scale_range, z_scale_range)
+    test_set = ShapeNet_AnTao350M(saved_path, 'test', selected_points, False, jitter, std, clip, rotate, which_axis,
+                                  angle_range, translate, x_translate_range, y_translate_range, z_translate_range, anisotropic_scale,
+                                  x_scale_range, y_scale_range, z_scale_range)
     return train_set, validation_set, trainval_set, test_set
 
 
