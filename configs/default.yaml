@@ -49,14 +49,15 @@ train:  # only valid when running the training script
     prefetch: ${train.dataloader.batch_size_per_gpu}  # samples to be prefetched. e.g. 64 means 64*num_workers samples to be prefetched
     pin_memory: true  # pin memory in RAM
     data_augmentation:
-      enable: false
+      enable: true
+      num_aug: 1  # how many augmentations applied in one point cloud at the same time
       jitter:  # add Gaussian noise to point cloud xyz positions
         enable: true
         std: 0.01
         clip: 0.05
       rotate:
         enable: true
-        which_axis: z
+        which_axis: y
         angle_range: [-15, 15]  # the unit is degree
       translate:
         enable: true
