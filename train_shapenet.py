@@ -230,11 +230,12 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
 
         # log results
         if rank == 0:
-            metric_dict = {'shapenet_train': {'lr': current_lr, 'loss': train_loss, 'mIoU': train_miou}}
-            if config.wandb.enable and (epoch+1) % config.train.validation_freq:
-                wandb.log(metric_dict, commit=True)
-            elif config.wandb.enable and not (epoch+1) % config.train.validation_freq:
-                wandb.log(metric_dict, commit=False)
+            if config.wandb.enable:
+                metric_dict = {'shapenet_train': {'lr': current_lr, 'loss': train_loss, 'mIoU': train_miou}}
+                if (epoch+1) % config.train.validation_freq:
+                    wandb.log(metric_dict, commit=True)
+                else:
+                    wandb.log(metric_dict, commit=False)
 
         # start validation
         if not (epoch+1) % config.train.validation_freq:
@@ -278,15 +279,16 @@ def train(local_rank, config):  # the first arg must be local rank for the sake 
 
             # log results
             if rank == 0:
-                metric_dict = {'shapenet_val': {'loss': val_loss, 'mIoU': val_miou}}
                 kbar.update(i+1, values=[('lr', current_lr), ('train_loss', train_loss), ('train_mIoU', train_miou), ('val_loss', val_loss), ('val_mIoU', val_miou)])
                 if config.wandb.enable:
-                    wandb.log(metric_dict, commit=True)
                     # save model
                     if val_miou >= max(val_miou_list):
                         state_dict = my_model.state_dict()
                         torch.save(state_dict, f'/tmp/{run.id}_checkpoint.pt')
                     val_miou_list.append(val_miou)
+                    metric_dict = {'shapenet_val': {'loss': val_loss, 'mIoU': val_miou}}
+                    metric_dict['shapenet_val']['best_mIoU'] = max(val_miou_list)
+                    wandb.log(metric_dict, commit=True)
         else:
             if rank == 0:
                 kbar.update(i+1, values=[('lr', current_lr), ('train_loss', train_loss), ('train_mIoU', train_miou)])
